@@ -6,7 +6,6 @@ const {
   GetSecretValueCommand,
 } = require("@aws-sdk/client-secrets-manager");
 
-// Initialize AWS clients
 const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(ddbClient);
 const secretsClient = new SecretsManagerClient({
@@ -17,13 +16,10 @@ const SHIPMENTS_TABLE = process.env.SHIPMENTS_TABLE;
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
 const SECRET_NAME = process.env.SECRET_NAME;
 
-// Cache for the secret
 let shipStationApiKey = null;
 
 const getApiKey = async () => {
-  if (shipStationApiKey) {
-    return shipStationApiKey;
-  }
+  if (shipStationApiKey) return shipStationApiKey;
   console.log("Fetching API key from Secrets Manager...");
   const command = new GetSecretValueCommand({ SecretId: SECRET_NAME });
   const response = await secretsClient.send(command);
@@ -53,7 +49,6 @@ exports.handler = async (event) => {
 
     const apiKey = await getApiKey();
 
-    // CORRECTED: Use api.shipengine.com and the API-Key header
     console.log(
       `Fetching initial tracking data for ${trackingNumber} from ShipEngine API...`,
     );
@@ -77,20 +72,28 @@ exports.handler = async (event) => {
 
     const trackingData = await response.json();
 
+    // -- UPDATED SHIPMENT MAPPING --
     const shipmentItem = {
+      // Existing fields (kept intact)
       trackingNumber: trackingData.tracking_number,
       carrier: carrier,
       direction: direction || null,
       source: source || null,
-      statusCode: trackingData.status_code || "UNKNOWN",
-      statusDescription:
-        trackingData.status_description || "Awaiting tracking data",
-      estimatedDeliveryDate: trackingData.estimated_delivery_date || null,
-      actualDeliveryDate: trackingData.actual_delivery_date || null,
-      shipDate: trackingData.ship_date || null,
       lastEventTimestamp:
         trackingData.events?.[0]?.occurred_at || new Date().toISOString(),
       createdAt: new Date().toISOString(),
+
+      // Requested fields mapped explicitly
+      statusCode: trackingData.status_code || "UNKNOWN",
+      carrierDetailCode: trackingData.carrier_detail_code || null,
+      statusDescription:
+        trackingData.status_description || "Awaiting tracking data",
+      carrierStatusCode: trackingData.carrier_status_code || null,
+      carrierStatusDescription: trackingData.carrier_status_description || null,
+      shipDate: trackingData.ship_date || null,
+      estimatedDeliveryDate: trackingData.estimated_delivery_date || null,
+      actualDeliveryDate: trackingData.actual_delivery_date || null,
+      exceptionDescription: trackingData.exception_description || null,
     };
 
     const shipmentPutCommand = new PutCommand({
@@ -102,16 +105,29 @@ exports.handler = async (event) => {
 
     if (trackingData.events && trackingData.events.length > 0) {
       for (const trackingEvent of trackingData.events) {
+        // -- UPDATED EVENT MAPPING --
         const eventPutCommand = new PutCommand({
           TableName: EVENTS_TABLE,
           Item: {
             trackingNumber: trackingData.tracking_number,
             occurredAt: trackingEvent.occurred_at,
-            description: trackingEvent.description,
-            cityLocality: trackingEvent.city_locality,
-            stateProvince: trackingEvent.state_province,
-            postalCode: trackingEvent.postal_code,
-            countryCode: trackingEvent.country_code,
+            carrierOccurredAt: trackingEvent.carrier_occurred_at || null,
+            description: trackingEvent.description || null,
+            cityLocality: trackingEvent.city_locality || null,
+            stateProvince: trackingEvent.state_province || null,
+            postalCode: trackingEvent.postal_code || null,
+            countryCode: trackingEvent.country_code || null,
+            companyName: trackingEvent.company_name || null,
+            signer: trackingEvent.signer || null,
+            eventCode: trackingEvent.event_code || null,
+            carrierDetailCode: trackingEvent.carrier_detail_code || null,
+            statusCode: trackingEvent.status_code || null,
+            statusDescription: trackingEvent.status_description || null,
+            carrierStatusCode: trackingEvent.carrier_status_code || null,
+            carrierStatusDescription:
+              trackingEvent.carrier_status_description || null,
+            latitude: trackingEvent.latitude || null,
+            longitude: trackingEvent.longitude || null,
           },
           ConditionExpression: "attribute_not_exists(trackingNumber)",
         });
