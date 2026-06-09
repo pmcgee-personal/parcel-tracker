@@ -8,7 +8,7 @@ Description: >
 
 Globals:
   Function:
-    Timeout: 3
+    Timeout: 10 # Bumped to 10 seconds to allow network latency when saving multiple events
     Runtime: nodejs22.x
 
 Resources:
@@ -52,3 +52,34 @@ Resources:
         WriteCapacityUnits: 1
       SSESpecification:
         SSEEnabled: true
+
+  # Lambda function to ingest webhook tracking updates
+  WebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers/webhook/index.handler
+      Environment:
+        Variables:
+          SHIPMENTS_TABLE: !Ref ShipmentsTable
+          EVENTS_TABLE: !Ref EventsTable
+      Policies:
+        # Grants our Lambda permission to read/write to the Shipments DynamoDB Table
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ShipmentsTable
+        # Grants our Lambda permission to read/write to the Events DynamoDB Table
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+      Events:
+        # Exposes this Lambda via an API Gateway endpoint: POST /webhook
+        WebhookApi:
+          Type: Api
+          Properties:
+            Path: /webhook
+            Method: post
+
+# Outputs are useful because AWS will print our brand new API Gateway URL in the CLI / Logs once deployed!
+Outputs:
+  WebhookApiUrl:
+    Description: "API Gateway endpoint URL for the Webhook Ingestion endpoint"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/webhook"
