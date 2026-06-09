@@ -1,4 +1,5 @@
 // src/handlers/webhook/index.js
+
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DynamoDBDocumentClient,
@@ -25,11 +26,24 @@ exports.handler = async (event) => {
       };
 
     const payload = JSON.parse(event.body);
-    const trackingNumber = payload.tracking_number;
+    const data = payload.data; // Extract the nested 'data' object
+
+    if (!data) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          message: "Request body is missing the 'data' object",
+        }),
+      };
+    }
+
+    const trackingNumber = data.tracking_number; // Use the nested tracking number
     if (!trackingNumber)
       return {
         statusCode: 400,
-        body: JSON.stringify({ message: "Missing tracking_number" }),
+        body: JSON.stringify({
+          message: "Missing tracking_number within the 'data' object",
+        }),
       };
 
     // -- UPDATED SHIPMENT UPDATE EXPRESSION --
@@ -39,15 +53,15 @@ exports.handler = async (event) => {
       UpdateExpression:
         "SET statusCode = :sc, carrierDetailCode = :cdc, statusDescription = :sd, carrierStatusCode = :csc, carrierStatusDescription = :csd, shipDate = :sdDate, estimatedDeliveryDate = :edd, actualDeliveryDate = :ad, exceptionDescription = :ed, updatedAt = :u",
       ExpressionAttributeValues: {
-        ":sc": payload.status_code || "UNKNOWN",
-        ":cdc": payload.carrier_detail_code || null,
-        ":sd": payload.status_description || "No description",
-        ":csc": payload.carrier_status_code || null,
-        ":csd": payload.carrier_status_description || null,
-        ":sdDate": payload.ship_date || null,
-        ":edd": payload.estimated_delivery_date || null,
-        ":ad": payload.actual_delivery_date || null,
-        ":ed": payload.exception_description || null,
+        ":sc": data.status_code || "UNKNOWN",
+        ":cdc": data.carrier_detail_code || null,
+        ":sd": data.status_description || "No description",
+        ":csc": data.carrier_status_code || null,
+        ":csd": data.carrier_status_description || null,
+        ":sdDate": data.ship_date || null,
+        ":edd": data.estimated_delivery_date || null,
+        ":ad": data.actual_delivery_date || null,
+        ":ed": data.exception_description || null,
         ":u": new Date().toISOString(),
       },
     };
@@ -55,7 +69,7 @@ exports.handler = async (event) => {
     console.log(`Updating shipment details for: ${trackingNumber}`);
     await docClient.send(new UpdateCommand(shipmentParams));
 
-    const trackingEvents = payload.events || [];
+    const trackingEvents = data.events || []; // Use the nested events array
     let newEventsCount = 0,
       duplicateEventsCount = 0;
 
