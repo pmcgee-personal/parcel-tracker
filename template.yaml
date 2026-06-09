@@ -10,6 +10,11 @@ Globals:
   Function:
     Timeout: 10 # 10 seconds to allow time for external API calls and database operations
     Runtime: nodejs22.x
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: "'*'"
 
 Resources:
   # DynamoDB table to store high-level shipment details.
