@@ -16,7 +16,10 @@ exports.handler = async (event) => {
     const params = {
       TableName: TABLE_NAME,
       ProjectionExpression:
-        "carrier, trackingNumber, source, direction, statusCode, statusDescription, estimatedDeliveryDate, lastEventTimestamp",
+        "carrier, trackingNumber, #src, direction, statusCode, statusDescription, estimatedDeliveryDate, lastEventTimestamp",
+      ExpressionAttributeNames: {
+        "#src": "source",
+      },
     };
 
     const command = new ScanCommand(params);
