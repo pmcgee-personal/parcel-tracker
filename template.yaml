@@ -1,9 +1,9 @@
-# template.yaml
 AWSTemplateFormatVersion: "2010-09-09"
+
 Transform: AWS::Serverless-2016-10-31
+
 Description: >
   parcel-tracker
-
   A personal package tracking dashboard for inbound and outbound shipments.
 
 Globals:
@@ -103,10 +103,34 @@ Resources:
             Path: /track
             Method: post
 
+  # Lambda function to retrieve all tracked shipments for the frontend
+  ListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers/list/index.handler
+      Environment:
+        Variables:
+          SHIPMENTS_TABLE: !Ref ShipmentsTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ShipmentsTable
+      Events:
+        ListApi:
+          Type: Api
+          Properties:
+            Path: /track
+            Method: get
+
 Outputs:
   WebhookApiUrl:
     Description: "API Gateway endpoint URL for the Webhook Ingestion endpoint"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/webhook"
+
   TrackApiUrl:
     Description: "API Gateway endpoint URL for the Track API endpoint"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/track"
+
+  ListApiUrl:
+    Description: "API Gateway endpoint URL for the List API endpoint (GET)"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/track"
