@@ -8,7 +8,7 @@ Description: >
 
 Globals:
   Function:
-    Timeout: 10 # Bumped to 10 seconds to allow network latency when saving multiple events
+    Timeout: 10 # 10 seconds to allow time for external API calls and database operations
     Runtime: nodejs22.x
 
 Resources:
@@ -53,7 +53,7 @@ Resources:
       SSESpecification:
         SSEEnabled: true
 
-  # Lambda function to ingest webhook tracking updates
+  # Lambda function to ingest webhook tracking updates from carrier integrations
   WebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -64,22 +64,49 @@ Resources:
           SHIPMENTS_TABLE: !Ref ShipmentsTable
           EVENTS_TABLE: !Ref EventsTable
       Policies:
-        # Grants our Lambda permission to read/write to the Shipments DynamoDB Table
         - DynamoDBCrudPolicy:
             TableName: !Ref ShipmentsTable
-        # Grants our Lambda permission to read/write to the Events DynamoDB Table
         - DynamoDBCrudPolicy:
             TableName: !Ref EventsTable
       Events:
-        # Exposes this Lambda via an API Gateway endpoint: POST /webhook
         WebhookApi:
           Type: Api
           Properties:
             Path: /webhook
             Method: post
 
-# Outputs are useful because AWS will print our brand new API Gateway URL in the CLI / Logs once deployed!
+  # Lambda function to register a new tracking number and fetch initial status
+  TrackFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers/track/index.handler
+      Environment:
+        Variables:
+          SHIPMENTS_TABLE: !Ref ShipmentsTable
+          EVENTS_TABLE: !Ref EventsTable
+          # Point the Lambda to the exact secret hierarchy we created
+          SECRET_NAME: "ParcelTracker/ShipStationApiKey"
+      Policies:
+        # Permission to write to both DynamoDB tables
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ShipmentsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+        # CORRECTED: Official AWS SAM policy template name to read a secret
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ParcelTracker/ShipStationApiKey-*"
+      Events:
+        TrackApi:
+          Type: Api
+          Properties:
+            Path: /track
+            Method: post
+
 Outputs:
   WebhookApiUrl:
     Description: "API Gateway endpoint URL for the Webhook Ingestion endpoint"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/webhook"
+  TrackApiUrl:
+    Description: "API Gateway endpoint URL for the Track API endpoint"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/track"
