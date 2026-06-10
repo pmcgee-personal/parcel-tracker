@@ -7,14 +7,12 @@
  */
 export function timeSince(isoString) {
   if (!isoString) return "";
-
   const date = new Date(isoString);
   const now = new Date();
   const secondsPast = Math.floor((now.getTime() - date.getTime()) / 1000);
 
   // If the time is in the future or invalid, just return a fallback
   if (secondsPast < 0) return "Just now";
-
   if (secondsPast < 60) {
     return "Just now";
   }
@@ -26,7 +24,6 @@ export function timeSince(isoString) {
     const hours = Math.floor(secondsPast / 3600);
     return `${hours} hour${hours > 1 ? "s" : ""} ago`;
   }
-
   const days = Math.floor(secondsPast / 86400);
   return `${days} day${days > 1 ? "s" : ""} ago`;
 }

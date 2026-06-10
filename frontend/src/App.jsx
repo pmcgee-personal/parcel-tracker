@@ -1,6 +1,23 @@
 import React, { useEffect, useState } from "react";
 import { timeSince } from "./utils/timeUtils";
 
+// Helper function to map ShipStation/ShipEngine status codes to modern neon badges
+const getStatusStyle = (code) => {
+  switch (code) {
+    case "IT": // In Transit
+    case "AC": // Accepted
+      return "bg-cyan-900/40 text-cyan-400 border border-cyan-800/60";
+    case "OFD": // Out for Delivery
+      return "bg-amber-900/40 text-amber-400 border border-amber-800/60";
+    case "DE": // Delivered
+      return "bg-emerald-900/40 text-emerald-400 border border-emerald-800/60";
+    case "EX": // Exception
+      return "bg-rose-900/40 text-rose-400 border border-rose-800/60";
+    default: // Unknown / Not Yet In System
+      return "bg-slate-800 text-slate-300 border border-slate-700";
+  }
+};
+
 export default function App() {
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,13 +30,18 @@ export default function App() {
       try {
         setLoading(true);
         const response = await fetch(API_URL);
-
         if (!response.ok) {
           throw new Error(`API error: ${response.statusText}`);
         }
-
         const data = await response.json();
-        setShipments(data);
+
+        // Sort shipments so the latest activity is at the top
+        const sortedData = data.sort(
+          (a, b) =>
+            new Date(b.lastEventTimestamp) - new Date(a.lastEventTimestamp),
+        );
+
+        setShipments(sortedData);
         setError(null);
       } catch (err) {
         console.error("Failed to fetch shipments:", err);
@@ -28,19 +50,18 @@ export default function App() {
         setLoading(false);
       }
     }
-
     fetchShipments();
   }, [API_URL]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-900 text-slate-200 py-12 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <header className="mb-10 text-center">
-          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
-            📦 Parcel Tracker
+          <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
+            Midnight <span className="text-cyan-400">Dispatch</span>
           </h1>
-          <p className="mt-3 text-lg text-slate-500">
+          <p className="mt-3 text-lg text-slate-400">
             Real-time inbound and outbound shipment logistics.
           </p>
         </header>
@@ -48,22 +69,22 @@ export default function App() {
         {/* Content States */}
         {loading && (
           <div className="flex justify-center items-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
           </div>
         )}
 
         {error && (
-          <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-md mb-8">
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="bg-rose-900/20 border-l-4 border-rose-500 p-4 rounded-md mb-8">
+            <p className="text-sm text-rose-400">{error}</p>
           </div>
         )}
 
         {!loading && !error && shipments.length === 0 && (
-          <div className="text-center py-20 bg-white rounded-xl shadow-sm border border-slate-100">
-            <p className="text-lg text-slate-500">
+          <div className="text-center py-20 bg-slate-800/50 rounded-xl shadow-lg border border-slate-700/50">
+            <p className="text-lg text-slate-300">
               No tracked shipments found.
             </p>
-            <p className="text-sm text-slate-400 mt-1">
+            <p className="text-sm text-slate-500 mt-1">
               Use the POST API to register your first package.
             </p>
           </div>
@@ -71,63 +92,63 @@ export default function App() {
 
         {/* Shipments Table */}
         {!loading && !error && shipments.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="bg-slate-800/40 rounded-xl shadow-2xl border border-slate-700 overflow-hidden backdrop-blur-sm">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-100">
-                <thead className="bg-slate-50">
+              <table className="min-w-full divide-y divide-slate-700/50">
+                <thead className="bg-slate-900/50">
                   <tr>
                     <th
                       scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                     >
                       Carrier & Tracking
                     </th>
                     <th
                       scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                     >
                       Direction
                     </th>
                     <th
                       scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                     >
                       Status
                     </th>
                     <th
                       scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                     >
                       Est. Delivery
                     </th>
                     <th
                       scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
+                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                     >
                       Last Activity
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
+                <tbody className="divide-y divide-slate-700/50 bg-transparent">
                   {shipments.map((shipment) => (
                     <tr
                       key={shipment.trackingNumber}
-                      className="hover:bg-slate-50 transition-colors"
+                      className="hover:bg-slate-700/30 transition-colors"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-semibold text-slate-900">
+                        <div className="text-sm font-semibold text-white tracking-wide">
                           {shipment.trackingNumber}
                         </div>
-                        <div className="text-xs text-slate-500 uppercase">
+                        <div className="text-xs text-slate-500 uppercase mt-0.5 font-medium tracking-wider">
                           {shipment.carrier}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
                             shipment.direction === "inbound"
-                              ? "bg-blue-50 text-blue-700"
-                              : "bg-teal-50 text-teal-700"
+                              ? "bg-blue-900/30 text-blue-400 border-blue-800/50"
+                              : "bg-purple-900/30 text-purple-400 border-purple-800/50"
                           }`}
                         >
                           {shipment.direction === "inbound"
@@ -136,21 +157,24 @@ export default function App() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-slate-900 font-medium">
+                        <span
+                          className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wide ${getStatusStyle(shipment.statusCode)}`}
+                        >
                           {shipment.statusDescription}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          Code: {shipment.statusCode}
-                        </div>
+                        </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                         {shipment.estimatedDeliveryDate
                           ? new Date(
                               shipment.estimatedDeliveryDate,
-                            ).toLocaleDateString()
+                            ).toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })
                           : "N/A"}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
                         {shipment.lastEventTimestamp
                           ? timeSince(shipment.lastEventTimestamp)
                           : "No events recorded"}
