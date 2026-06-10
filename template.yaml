@@ -1,7 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-
 Transform: AWS::Serverless-2016-10-31
-
 Description: >
   parcel-tracker
   A personal package tracking dashboard for inbound and outbound shipments.
@@ -98,7 +96,7 @@ Resources:
             TableName: !Ref ShipmentsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref EventsTable
-        # CORRECTED: Official AWS SAM policy template name to read a secret
+        # Official AWS SAM policy template name to read a secret
         - AWSSecretsManagerGetSecretValuePolicy:
             SecretArn: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ParcelTracker/ShipStationApiKey-*"
       Events:
@@ -127,15 +125,67 @@ Resources:
             Path: /track
             Method: get
 
+  # --- FRONTEND HOSTING RESOURCES ---
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: "s3:GetObject"
+            Resource: !Sub "arn:aws:s3:::${FrontendBucket}/*"
+
+  FrontendCloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName:
+              !Select [2, !Split ["/", !GetAtt FrontendBucket.WebsiteURL]]
+            Id: S3Origin
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+        Enabled: true
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          ForwardedValues:
+            QueryString: false
+
 Outputs:
   WebhookApiUrl:
     Description: "API Gateway endpoint URL for the Webhook Ingestion endpoint"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/webhook"
-
   TrackApiUrl:
     Description: "API Gateway endpoint URL for the Track API endpoint"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/track"
-
   ListApiUrl:
     Description: "API Gateway endpoint URL for the List API endpoint (GET)"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/track"
+
+  # --- FRONTEND OUTPUTS ---
+  FrontendBucketName:
+    Description: "Name of the S3 bucket hosting the frontend"
+    Value: !Ref FrontendBucket
+  CloudFrontDistributionId:
+    Description: "ID of the CloudFront distribution"
+    Value: !Ref FrontendCloudFront
+  CloudFrontDomainName:
+    Description: "Public URL of your React dashboard"
+    Value: !Sub "https://${FrontendCloudFront.DomainName}"

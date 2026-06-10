@@ -7,7 +7,6 @@ on:
       - main
 
 env:
-  # This fixes the Node 20 deprecation warning in GitHub Actions
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -32,3 +31,24 @@ jobs:
 
       - name: SAM Deploy
         run: sam deploy --no-confirm-changeset --stack-name parcel-tracker-stack
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build and Deploy Frontend
+        working-directory: ./frontend
+        run: |
+          # 1. Fetch the dynamic URLs/IDs from the deployed SAM stack
+          API_URL=$(aws cloudformation describe-stacks --stack-name parcel-tracker-stack --query "Stacks[0].Outputs[?OutputKey=='ListApiUrl'].OutputValue" --output text)
+          BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name parcel-tracker-stack --query "Stacks[0].Outputs[?OutputKey=='FrontendBucketName'].OutputValue" --output text)
+          DIST_ID=$(aws cloudformation describe-stacks --stack-name parcel-tracker-stack --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue" --output text)
+
+          # 2. Install dependencies and build React (passing the API URL dynamically)
+          npm ci
+          VITE_API_BASE_URL=$API_URL npm run build
+
+          # 3. Sync the built website to S3 and invalidate the CloudFront cache
+          aws s3 sync dist/ s3://$BUCKET_NAME --delete
+          aws cloudfront create-invalidation --distribution-id $DIST_ID --paths "/*"
