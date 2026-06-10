@@ -1,4 +1,5 @@
 # .github/workflows/deploy.yml
+
 name: Deploy Parcel Tracker
 
 on:
@@ -21,7 +22,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-west-2
+          aws-region: us-west-2 # Make sure this is your correct AWS region
 
       - name: Setup SAM
         uses: aws-actions/setup-sam@v2
@@ -30,7 +31,8 @@ jobs:
         run: sam build --use-container
 
       - name: SAM Deploy
-        run: sam deploy --no-confirm-changeset --stack-name parcel-tracker-stack
+        # MODIFIED LINE: Added --no-fail-on-empty-changeset
+        run: sam deploy --no-confirm-changeset --stack-name parcel-tracker-stack --no-fail-on-empty-changeset
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
