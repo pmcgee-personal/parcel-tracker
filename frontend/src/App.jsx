@@ -60,14 +60,15 @@ export default function App() {
         {/* Header */}
         <header className="mb-10 text-center">
           <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
-            Midnight <span className="text-cyan-400">Dispatch</span>
+            Where Is <span className="text-cyan-400">My Order?</span>
           </h1>
           <p className="mt-3 text-lg text-slate-400">
-            Real-time inbound and outbound shipment logistics.
+            Real-time inbound and outbound shipments
           </p>
         </header>
 
         {/* Content States */}
+        {/* ... (no changes in this section) ... */}
         {loading && (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
@@ -122,7 +123,6 @@ export default function App() {
                     >
                       Est. Delivery
                     </th>
-                    {/* NEW COLUMN */}
                     <th
                       scope="col"
                       className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
@@ -143,6 +143,7 @@ export default function App() {
                       key={shipment.trackingNumber}
                       className="hover:bg-slate-700/30 transition-colors"
                     >
+                      {/* ... (no changes in first 3 cells) ... */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-semibold text-white tracking-wide">
                           {shipment.trackingNumber}
@@ -153,13 +154,8 @@ export default function App() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-x-2 px-2.5 py-1 rounded-full text-xs font-medium border ${
-                            shipment.direction === "inbound"
-                              ? "bg-blue-900/30 text-blue-400 border-blue-800/50"
-                              : "bg-purple-900/30 text-purple-400 border-purple-800/50"
-                          }`}
+                          className={`inline-flex items-center gap-x-2 px-2.5 py-1 rounded-full text-xs font-medium border ${shipment.direction === "inbound" ? "bg-blue-900/30 text-blue-400 border-blue-800/50" : "bg-purple-900/30 text-purple-400 border-purple-800/50"}`}
                         >
-                          {/* UPDATED ICONS */}
                           {shipment.direction === "inbound" ? (
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
@@ -190,6 +186,7 @@ export default function App() {
                           {shipment.statusDescription}
                         </span>
                       </td>
+
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                         {shipment.estimatedDeliveryDate
                           ? new Date(
@@ -198,9 +195,10 @@ export default function App() {
                               month: "short",
                               day: "numeric",
                             })
-                          : "N/A"}
+                          : "—"}{" "}
+                        {/* <-- THIS LINE WAS CHANGED */}
                       </td>
-                      {/* NEW DATA CELL */}
+
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                         {shipment.actualDeliveryDate
                           ? new Date(
@@ -211,6 +209,7 @@ export default function App() {
                             })
                           : "—"}
                       </td>
+
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
                         {shipment.lastEventTimestamp
                           ? timeSince(shipment.lastEventTimestamp)
