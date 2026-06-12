@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { timeSince } from "./utils/timeUtils";
 
-// Helper function to map ShipStation/ShipEngine status codes to modern neon badges
+// A helper function to get the correct Tailwind classes for status codes.
 const getStatusStyle = (code) => {
   switch (code) {
     case "IT": // In Transit
@@ -13,7 +13,7 @@ const getStatusStyle = (code) => {
       return "bg-emerald-900/40 text-emerald-400 border border-emerald-800/60";
     case "EX": // Exception
       return "bg-rose-900/40 text-rose-400 border border-rose-800/60";
-    default: // Unknown / Not Yet In System
+    default: // Unknown, Not Yet in System, etc.
       return "bg-slate-800 text-slate-300 border border-slate-700";
   }
 };
@@ -35,7 +35,7 @@ export default function App() {
         }
         const data = await response.json();
 
-        // Sort shipments so the latest activity is at the top
+        // Sort shipments by last event timestamp, most recent first
         const sortedData = data.sort(
           (a, b) =>
             new Date(b.lastEventTimestamp) - new Date(a.lastEventTimestamp),
@@ -50,12 +50,13 @@ export default function App() {
         setLoading(false);
       }
     }
+
     fetchShipments();
   }, [API_URL]);
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 py-12 px-4 sm:px-6 lg:px-8 font-sans">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <header className="mb-10 text-center">
           <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
@@ -121,6 +122,13 @@ export default function App() {
                     >
                       Est. Delivery
                     </th>
+                    {/* NEW COLUMN */}
+                    <th
+                      scope="col"
+                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                    >
+                      Delivered On
+                    </th>
                     <th
                       scope="col"
                       className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
@@ -145,15 +153,34 @@ export default function App() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                          className={`inline-flex items-center gap-x-2 px-2.5 py-1 rounded-full text-xs font-medium border ${
                             shipment.direction === "inbound"
                               ? "bg-blue-900/30 text-blue-400 border-blue-800/50"
                               : "bg-purple-900/30 text-purple-400 border-purple-800/50"
                           }`}
                         >
-                          {shipment.direction === "inbound"
-                            ? "⬇ Inbound"
-                            : "⬆ Outbound"}
+                          {/* UPDATED ICONS */}
+                          {shipment.direction === "inbound" ? (
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-4 w-4"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                            >
+                              <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                            </svg>
+                          ) : (
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-4 w-4"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                            >
+                              <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+                              <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v5.05a2.5 2.5 0 014.9 0H19a1 1 0 001-1V8a1 1 0 00-1-1h-5z" />
+                            </svg>
+                          )}
+                          {shipment.direction}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -170,9 +197,19 @@ export default function App() {
                             ).toLocaleDateString(undefined, {
                               month: "short",
                               day: "numeric",
-                              year: "numeric",
                             })
                           : "N/A"}
+                      </td>
+                      {/* NEW DATA CELL */}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                        {shipment.actualDeliveryDate
+                          ? new Date(
+                              shipment.actualDeliveryDate,
+                            ).toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                            })
+                          : "—"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
                         {shipment.lastEventTimestamp
