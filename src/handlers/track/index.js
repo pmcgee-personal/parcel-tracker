@@ -1,4 +1,5 @@
 // src/handlers/track/index.js
+
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
 const {
@@ -15,7 +16,6 @@ const secretsClient = new SecretsManagerClient({
 const SHIPMENTS_TABLE = process.env.SHIPMENTS_TABLE;
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
 const SECRET_NAME = process.env.SECRET_NAME;
-
 let shipStationApiKey = null;
 
 const getApiKey = async () => {
@@ -48,7 +48,6 @@ exports.handler = async (event) => {
     }
 
     const apiKey = await getApiKey();
-
     console.log(
       `Fetching initial tracking data for ${trackingNumber} from ShipEngine API...`,
     );
@@ -56,10 +55,7 @@ exports.handler = async (event) => {
 
     const response = await fetch(apiUrl, {
       method: "GET",
-      headers: {
-        "API-Key": apiKey,
-        "Content-Type": "application/json",
-      },
+      headers: { "API-Key": apiKey, "Content-Type": "application/json" },
     });
 
     if (!response.ok) {
@@ -72,9 +68,7 @@ exports.handler = async (event) => {
 
     const trackingData = await response.json();
 
-    // -- UPDATED SHIPMENT MAPPING --
     const shipmentItem = {
-      // Existing fields (kept intact)
       trackingNumber: trackingData.tracking_number,
       carrier: carrier,
       direction: direction || null,
@@ -82,8 +76,6 @@ exports.handler = async (event) => {
       lastEventTimestamp:
         trackingData.events?.[0]?.occurred_at || new Date().toISOString(),
       createdAt: new Date().toISOString(),
-
-      // Requested fields mapped explicitly
       statusCode: trackingData.status_code || "UNKNOWN",
       carrierDetailCode: trackingData.carrier_detail_code || null,
       statusDescription:
@@ -105,7 +97,6 @@ exports.handler = async (event) => {
 
     if (trackingData.events && trackingData.events.length > 0) {
       for (const trackingEvent of trackingData.events) {
-        // -- UPDATED EVENT MAPPING --
         const eventPutCommand = new PutCommand({
           TableName: EVENTS_TABLE,
           Item: {
@@ -129,13 +120,11 @@ exports.handler = async (event) => {
             latitude: trackingEvent.latitude || null,
             longitude: trackingEvent.longitude || null,
           },
-          ConditionExpression: "attribute_not_exists(trackingNumber)",
+          // BUG FIX: Removed ConditionExpression that prevented saving multiple initial events.
         });
-        try {
-          await docClient.send(eventPutCommand);
-        } catch (err) {
-          if (err.name !== "ConditionalCheckFailedException") throw err;
-        }
+
+        // This will now correctly overwrite events if they somehow already exist, ensuring data consistency.
+        await docClient.send(eventPutCommand);
       }
       console.log(`Initial events written: ${trackingData.events.length}`);
     }

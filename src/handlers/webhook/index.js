@@ -26,18 +26,17 @@ exports.handler = async (event) => {
       };
 
     const payload = JSON.parse(event.body);
-    const data = payload.data; // Extract the nested 'data' object
+    const data = payload.data;
 
-    if (!data) {
+    if (!data)
       return {
         statusCode: 400,
         body: JSON.stringify({
           message: "Request body is missing the 'data' object",
         }),
       };
-    }
 
-    const trackingNumber = data.tracking_number; // Use the nested tracking number
+    const trackingNumber = data.tracking_number;
     if (!trackingNumber)
       return {
         statusCode: 400,
@@ -46,12 +45,17 @@ exports.handler = async (event) => {
         }),
       };
 
-    // -- UPDATED SHIPMENT UPDATE EXPRESSION --
+    // Find the most recent event from the incoming webhook payload.
+    const latestEvent = data.events?.sort(
+      (a, b) => new Date(b.occurred_at) - new Date(a.occurred_at),
+    )[0];
+
     const shipmentParams = {
       TableName: SHIPMENTS_TABLE,
       Key: { trackingNumber },
+      // BUG FIX: Added lastEventTimestamp to the UpdateExpression.
       UpdateExpression:
-        "SET statusCode = :sc, carrierDetailCode = :cdc, statusDescription = :sd, carrierStatusCode = :csc, carrierStatusDescription = :csd, shipDate = :sdDate, estimatedDeliveryDate = :edd, actualDeliveryDate = :ad, exceptionDescription = :ed, updatedAt = :u",
+        "SET statusCode = :sc, carrierDetailCode = :cdc, statusDescription = :sd, carrierStatusCode = :csc, carrierStatusDescription = :csd, shipDate = :sdDate, estimatedDeliveryDate = :edd, actualDeliveryDate = :ad, exceptionDescription = :ed, updatedAt = :u, lastEventTimestamp = :let",
       ExpressionAttributeValues: {
         ":sc": data.status_code || "UNKNOWN",
         ":cdc": data.carrier_detail_code || null,
@@ -63,13 +67,17 @@ exports.handler = async (event) => {
         ":ad": data.actual_delivery_date || null,
         ":ed": data.exception_description || null,
         ":u": new Date().toISOString(),
+        // BUG FIX: Set the lastEventTimestamp from the most recent event in the payload.
+        ":let": latestEvent
+          ? latestEvent.occurred_at
+          : data.last_event?.occurred_at,
       },
     };
 
     console.log(`Updating shipment details for: ${trackingNumber}`);
     await docClient.send(new UpdateCommand(shipmentParams));
 
-    const trackingEvents = data.events || []; // Use the nested events array
+    const trackingEvents = data.events || [];
     let newEventsCount = 0,
       duplicateEventsCount = 0;
 
@@ -77,7 +85,6 @@ exports.handler = async (event) => {
       const occurredAt = trackingEvent.occurred_at;
       if (!occurredAt) continue;
 
-      // -- UPDATED EVENT MAPPING --
       const eventParams = {
         TableName: EVENTS_TABLE,
         Item: {
@@ -102,8 +109,8 @@ exports.handler = async (event) => {
           longitude: trackingEvent.longitude || null,
           createdAt: new Date().toISOString(),
         },
-        ConditionExpression:
-          "attribute_not_exists(trackingNumber) AND attribute_not_exists(occurredAt)",
+        // BUG FIX: Corrected ConditionExpression to only check the composite key (trackingNumber + occurredAt).
+        ConditionExpression: "attribute_not_exists(occurredAt)",
       };
 
       try {
