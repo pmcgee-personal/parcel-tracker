@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { timeSince } from "./utils/timeUtils";
 
-// A helper function to get the correct Tailwind classes for status codes.
 const getStatusStyle = (code) => {
   switch (code) {
     case "IT": // In Transit
@@ -23,6 +22,9 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // NEW STATE: Toggle for showing all shipments
+  const [showAll, setShowAll] = useState(false);
+
   const API_URL = import.meta.env.VITE_API_BASE_URL;
 
   useEffect(() => {
@@ -35,18 +37,15 @@ export default function App() {
         }
         const data = await response.json();
 
-        // --- NEW CUSTOM SORTING LOGIC ---
+        // Custom Sorting Logic
         const sortedData = data.sort((a, b) => {
           const activeStatuses = ["IT", "EX", "AC", "OFD"];
-
           const isA_Active = activeStatuses.includes(a.statusCode);
           const isB_Active = activeStatuses.includes(b.statusCode);
 
-          // If one is active and the other is not, the active one comes first.
           if (isA_Active && !isB_Active) return -1;
           if (!isA_Active && isB_Active) return 1;
 
-          // If both are active, sort by Estimated Delivery Date (soonest first).
           if (isA_Active && isB_Active) {
             const dateA = a.estimatedDeliveryDate
               ? new Date(a.estimatedDeliveryDate)
@@ -54,12 +53,11 @@ export default function App() {
             const dateB = b.estimatedDeliveryDate
               ? new Date(b.estimatedDeliveryDate)
               : null;
-            if (!dateA) return 1; // Put items without a date at the bottom of the active group
+            if (!dateA) return 1;
             if (!dateB) return -1;
             return dateA - dateB;
           }
 
-          // If neither are active (e.g., both are Delivered), sort by Actual Delivery Date (newest first).
           const dateA = a.actualDeliveryDate
             ? new Date(a.actualDeliveryDate)
             : null;
@@ -80,14 +78,33 @@ export default function App() {
         setLoading(false);
       }
     }
-
     fetchShipments();
   }, [API_URL]);
+
+  // --- NEW FILTERING LOGIC ---
+  const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  const visibleShipments = showAll
+    ? shipments
+    : shipments.filter((shipment) => {
+        // If it's delivered, check how old the last activity is
+        if (shipment.statusCode === "DE") {
+          const lastActivityTime = shipment.lastEventTimestamp
+            ? new Date(shipment.lastEventTimestamp).getTime()
+            : 0;
+
+          const ageInMs = now - lastActivityTime;
+          return ageInMs <= THREE_DAYS_MS; // Only show if 3 days old or newer
+        }
+        return true; // Keep all other active shipments visible
+      });
+
+  const hasHiddenShipments = shipments.length > visibleShipments.length;
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 py-12 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <header className="mb-10 text-center">
           <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
             Where Is <span className="text-cyan-400">My Order?</span>
@@ -97,17 +114,18 @@ export default function App() {
           </p>
         </header>
 
-        {/* Content States (no changes here) */}
         {loading && (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
           </div>
         )}
+
         {error && (
           <div className="bg-rose-900/20 border-l-4 border-rose-500 p-4 rounded-md mb-8">
             <p className="text-sm text-rose-400">{error}</p>
           </div>
         )}
+
         {!loading && !error && shipments.length === 0 && (
           <div className="text-center py-20 bg-slate-800/50 rounded-xl shadow-lg border border-slate-700/50">
             <p className="text-lg text-slate-300">
@@ -119,145 +137,193 @@ export default function App() {
           </div>
         )}
 
-        {/* Shipments Table (no changes here) */}
         {!loading && !error && shipments.length > 0 && (
-          <div className="bg-slate-800/40 rounded-xl shadow-2xl border border-slate-700 overflow-hidden backdrop-blur-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-700/50">
-                <thead className="bg-slate-900/50">
-                  <tr>
-                    <th
-                      scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
-                    >
-                      Carrier & Tracking
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
-                    >
-                      Direction
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
-                    >
-                      Status
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
-                    >
-                      Shipped On
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
-                    >
-                      Est. Delivery
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
-                    >
-                      Delivered On
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
-                    >
-                      Last Activity
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700/50 bg-transparent">
-                  {shipments.map((shipment) => (
-                    <tr
-                      key={shipment.trackingNumber}
-                      className="hover:bg-slate-700/30 transition-colors"
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-semibold text-white tracking-wide">
-                          {shipment.trackingNumber}
-                        </div>
-                        <div className="text-xs text-slate-500 uppercase mt-0.5 font-medium tracking-wider">
-                          {shipment.carrier}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center gap-x-2 px-2.5 py-1 rounded-full text-xs font-medium border ${shipment.direction === "inbound" ? "bg-blue-900/30 text-blue-400 border-blue-800/50" : "bg-purple-900/30 text-purple-400 border-purple-800/50"}`}
-                        >
-                          {shipment.direction === "inbound" ? (
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-4 w-4"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-                            </svg>
-                          ) : (
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-4 w-4"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
-                              <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v5.05a2.5 2.5 0 014.9 0H19a1 1 0 001-1V8a1 1 0 00-1-1h-5z" />
-                            </svg>
-                          )}
-                          {shipment.direction}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wide ${getStatusStyle(shipment.statusCode)}`}
-                        >
-                          {shipment.statusDescription}
-                        </span>
-                      </td>
-                      {/* ADD THIS NEW DATA CELL */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                        {shipment.shipDate
-                          ? new Date(shipment.shipDate).toLocaleDateString(
-                              undefined,
-                              { month: "short", day: "numeric" },
-                            )
-                          : "—"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                        {shipment.estimatedDeliveryDate
-                          ? new Date(
-                              shipment.estimatedDeliveryDate,
-                            ).toLocaleDateString(undefined, {
-                              month: "short",
-                              day: "numeric",
-                            })
-                          : "—"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                        {shipment.actualDeliveryDate
-                          ? new Date(
-                              shipment.actualDeliveryDate,
-                            ).toLocaleDateString(undefined, {
-                              month: "short",
-                              day: "numeric",
-                            })
-                          : "—"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
-                        {shipment.lastEventTimestamp
-                          ? timeSince(shipment.lastEventTimestamp)
-                          : "No events recorded"}
-                      </td>
+          <>
+            <div className="bg-slate-800/40 rounded-xl shadow-2xl border border-slate-700 overflow-hidden backdrop-blur-sm">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-700/50">
+                  <thead className="bg-slate-900/50">
+                    <tr>
+                      <th
+                        scope="col"
+                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                      >
+                        Carrier & Tracking
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                      >
+                        Direction
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                      >
+                        Status
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                      >
+                        Shipped On
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                      >
+                        Est. Delivery
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                      >
+                        Delivered On
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                      >
+                        Last Activity
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/50 bg-transparent">
+                    {visibleShipments.map((shipment) => (
+                      <tr
+                        key={shipment.trackingNumber}
+                        className="hover:bg-slate-700/30 transition-colors"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-semibold text-white tracking-wide">
+                            {shipment.trackingNumber}
+                          </div>
+                          <div className="text-xs text-slate-500 uppercase mt-0.5 font-medium tracking-wider">
+                            {shipment.carrier}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center gap-x-2 px-2.5 py-1 rounded-full text-xs font-medium border ${shipment.direction === "inbound" ? "bg-blue-900/30 text-blue-400 border-blue-800/50" : "bg-purple-900/30 text-purple-400 border-purple-800/50"}`}
+                          >
+                            {shipment.direction === "inbound" ? (
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-4 w-4"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                              </svg>
+                            ) : (
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-4 w-4"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+                                <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v5.05a2.5 2.5 0 014.9 0H19a1 1 0 001-1V8a1 1 0 00-1-1h-5z" />
+                              </svg>
+                            )}
+                            {shipment.direction}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wide ${getStatusStyle(shipment.statusCode)}`}
+                          >
+                            {shipment.statusDescription}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                          {shipment.shipDate
+                            ? new Date(shipment.shipDate).toLocaleDateString(
+                                undefined,
+                                { month: "short", day: "numeric" },
+                              )
+                            : "—"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                          {shipment.estimatedDeliveryDate
+                            ? new Date(
+                                shipment.estimatedDeliveryDate,
+                              ).toLocaleDateString(undefined, {
+                                month: "short",
+                                day: "numeric",
+                              })
+                            : "—"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                          {shipment.actualDeliveryDate
+                            ? new Date(
+                                shipment.actualDeliveryDate,
+                              ).toLocaleDateString(undefined, {
+                                month: "short",
+                                day: "numeric",
+                              })
+                            : "—"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
+                          {shipment.lastEventTimestamp
+                            ? timeSince(shipment.lastEventTimestamp)
+                            : "No events recorded"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+
+            {/* Toggle Button for Hidden Shipments */}
+            {(hasHiddenShipments || showAll) && (
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={() => setShowAll(!showAll)}
+                  className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full text-sm font-semibold transition-all border border-slate-700 shadow-md flex items-center gap-2"
+                >
+                  {showAll ? (
+                    <>
+                      Hide Older Deliveries
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        stroke="currentColor"
+                        className="w-4 h-4"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M4.5 15.75l7.5-7.5 7.5 7.5"
+                        />
+                      </svg>
+                    </>
+                  ) : (
+                    <>
+                      Show All Shipments
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        stroke="currentColor"
+                        className="w-4 h-4"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+                        />
+                      </svg>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
