@@ -131,13 +131,24 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(shipmentItem),
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*", // Allows your frontend domain to read the response
+        "Access-Control-Allow-Methods": "POST,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+      body: JSON.stringify({ message: "Successfully registered package" }),
     };
   } catch (error) {
     console.error("Error in TrackLambda:", error);
     return {
       statusCode: 500,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*", // Allows your frontend domain to read the response
+        "Access-Control-Allow-Methods": "POST,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
       body: JSON.stringify({
         message: "Internal Server Error",
         error: error.message,

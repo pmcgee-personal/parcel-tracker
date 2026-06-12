@@ -190,8 +190,7 @@ export default function App() {
                 </option>
                 <option value="fedex">FedEx</option>
                 <option value="ups">UPS</option>
-                <option value="usps">USPS</option>
-                <option value="dhl">DHL</option>
+                <option value="stamps_com">USPS</option>
               </select>
               <select
                 value={newDirection}
@@ -206,7 +205,7 @@ export default function App() {
                 disabled={isSubmitting}
                 className="bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md"
               >
-                {isSubmitting ? "Adding..." : "Add Package"}
+                {isSubmitting ? "Adding..." : "Add Shipment"}
               </button>
             </form>
 
