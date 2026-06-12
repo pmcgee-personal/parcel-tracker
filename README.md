@@ -1,127 +1,207 @@
 # parcel-tracker
 
-This project contains source code and supporting files for a serverless application that you can deploy with the SAM CLI. It includes the following files and folders.
+A personal shipment tracking dashboard for inbound and outbound packages. Built as a serverless application on AWS using SAM, it ingests real carrier webhook events, stores a full event timeline, and serves a lightweight frontend dashboard via CloudFront.
 
-- hello-world - Code for the application's Lambda function.
-- events - Invocation events that you can use to invoke the function.
-- hello-world/tests - Unit tests for the application code. 
-- template.yaml - A template that defines the application's AWS resources.
+---
 
-The application uses several AWS resources, including Lambda functions and an API Gateway API. These resources are defined in the `template.yaml` file in this project. You can update the template to add AWS resources through the same deployment process that updates your application code.
+## Overview
 
-If you prefer to use an integrated development environment (IDE) to build and test your application, you can use the AWS Toolkit.  
-The AWS Toolkit is an open source plug-in for popular IDEs that uses the SAM CLI to build and deploy serverless applications on AWS. The AWS Toolkit also adds a simplified step-through debugging experience for Lambda function code. See the following links to get started.
+This project was built as a learning project and personal tool, combining real ShipStation webhook payloads with AWS serverless infrastructure. It lets you register tracking numbers, receive live carrier updates, and view the full event history for every shipment in a simple React-style frontend.
 
-* [CLion](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [GoLand](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [IntelliJ](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [WebStorm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [Rider](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [PhpStorm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [PyCharm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [RubyMine](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [DataGrip](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [VS Code](https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/welcome.html)
-* [Visual Studio](https://docs.aws.amazon.com/toolkit-for-visual-studio/latest/user-guide/welcome.html)
+**Stack:**
 
-## Deploy the sample application
+- AWS Lambda (Node.js 22.x) — three discrete handlers for ingestion, tracking, and listing
+- Amazon API Gateway — REST API with CORS enabled
+- Amazon DynamoDB — two tables: `Shipments` and `Events`
+- AWS Secrets Manager — stores the ShipStation API key
+- Amazon S3 + CloudFront — hosts the frontend dashboard with HTTPS redirect
 
-The Serverless Application Model Command Line Interface (SAM CLI) is an extension of the AWS CLI that adds functionality for building and testing Lambda applications. It uses Docker to run your functions in an Amazon Linux environment that matches Lambda. It can also emulate your application's build environment and API.
+---
 
-To use the SAM CLI, you need the following tools.
+## Architecture
 
-* SAM CLI - [Install the SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
-* Node.js - [Install Node.js 22](https://nodejs.org/en/), including the NPM package management tool.
-* Docker - [Install Docker community edition](https://hub.docker.com/search/?type=edition&offering=community)
+```
+Carrier / ShipStation
+        │
+        ▼
+  POST /webhook  ──►  WebhookFunction  ──►  Events table (timeline)
+                                       ──►  Shipments table (latest status)
 
-To build and deploy your application for the first time, run the following in your shell:
+  POST /track    ──►  TrackFunction    ──►  Fetches initial status via ShipStation API
+                                       ──►  Writes to both tables
+
+  GET  /track    ──►  ListFunction     ──►  Reads Shipments table
+                                       ──►  Returns all tracked shipments
+
+  CloudFront ──► S3 Bucket ──► Frontend dashboard
+```
+
+---
+
+## Project Structure
+
+```
+parcel-tracker/
+├── .github/workflows/       # CI/CD workflows (GitHub Actions)
+├── events/                  # Sample JSON payloads for local Lambda testing
+├── frontend/                # Static frontend dashboard (HTML/CSS/JS)
+├── src/
+│   └── handlers/
+│       ├── webhook/         # Ingests carrier tracking updates (POST /webhook)
+│       ├── track/           # Registers a new tracking number (POST /track)
+│       └── list/            # Returns all shipments for the dashboard (GET /track)
+├── .gitignore
+├── samconfig.toml           # SAM deployment configuration
+└── template.yaml            # AWS SAM infrastructure definition
+```
+
+---
+
+## DynamoDB Tables
+
+### `Shipments`
+
+Stores high-level shipment details.
+
+| Attribute        | Type   | Role        |
+| ---------------- | ------ | ----------- |
+| `trackingNumber` | String | Primary key |
+
+### `Events`
+
+Stores the full timeline of tracking events per shipment.
+
+| Attribute        | Type   | Role          |
+| ---------------- | ------ | ------------- |
+| `trackingNumber` | String | Partition key |
+| `occurredAt`     | String | Sort key      |
+
+Both tables have `DeletionPolicy: Retain` — they survive stack teardown.
+
+---
+
+## Prerequisites
+
+- [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
+- [Node.js 22](https://nodejs.org/en/)
+- [Docker](https://hub.docker.com/search/?type=edition&offering=community) (for local testing)
+- An AWS account with appropriate IAM permissions
+- A ShipStation API key stored in AWS Secrets Manager under the path `ParcelTracker/ShipStationApiKey`
+
+---
+
+## Deployment
+
+### First-time deploy
 
 ```bash
 sam build
 sam deploy --guided
 ```
 
-The first command will build the source of your application. The second command will package and deploy your application to AWS, with a series of prompts:
-
-* **Stack Name**: The name of the stack to deploy to CloudFormation. This should be unique to your account and region, and a good starting point would be something matching your project name.
-* **AWS Region**: The AWS region you want to deploy your app to.
-* **Confirm changes before deploy**: If set to yes, any change sets will be shown to you before execution for manual review. If set to no, the AWS SAM CLI will automatically deploy application changes.
-* **Allow SAM CLI IAM role creation**: Many AWS SAM templates, including this example, create AWS IAM roles required for the AWS Lambda function(s) included to access AWS services. By default, these are scoped down to minimum required permissions. To deploy an AWS CloudFormation stack which creates or modifies IAM roles, the `CAPABILITY_IAM` value for `capabilities` must be provided. If permission isn't provided through this prompt, to deploy this example you must explicitly pass `--capabilities CAPABILITY_IAM` to the `sam deploy` command.
-* **Save arguments to samconfig.toml**: If set to yes, your choices will be saved to a configuration file inside the project, so that in the future you can just re-run `sam deploy` without parameters to deploy changes to your application.
-
-You can find your API Gateway Endpoint URL in the output values displayed after deployment.
-
-## Use the SAM CLI to build and test locally
-
-Build your application with the `sam build` command.
+The `--guided` flag walks you through stack name, region, and IAM capability prompts. Answers are saved to `samconfig.toml` so subsequent deploys just need:
 
 ```bash
-parcel-tracker$ sam build
+sam build && sam deploy
 ```
 
-The SAM CLI installs dependencies defined in `hello-world/package.json`, creates a deployment package, and saves it in the `.aws-sam/build` folder.
+### Deploy the frontend
 
-Test a single function by invoking it directly with a test event. An event is a JSON document that represents the input that the function receives from the event source. Test events are included in the `events` folder in this project.
-
-Run functions locally and invoke them with the `sam local invoke` command.
+After deploying the backend, upload the frontend to the S3 bucket created by the stack:
 
 ```bash
-parcel-tracker$ sam local invoke HelloWorldFunction --event events/event.json
+aws s3 sync frontend/ s3://<FrontendBucketName> --delete
 ```
 
-The SAM CLI can also emulate your application's API. Use the `sam local start-api` to run the API locally on port 3000.
+Then invalidate the CloudFront cache if needed:
 
 ```bash
-parcel-tracker$ sam local start-api
-parcel-tracker$ curl http://localhost:3000/
+aws cloudfront create-invalidation --distribution-id <CloudFrontDistributionId> --paths "/*"
 ```
 
-The SAM CLI reads the application template to determine the API's routes and the functions that they invoke. The `Events` property on each function's definition includes the route and method for each path.
+Stack outputs include `FrontendBucketName`, `CloudFrontDistributionId`, and `CloudFrontDomainName`.
 
-```yaml
-      Events:
-        HelloWorld:
-          Type: Api
-          Properties:
-            Path: /hello
-            Method: get
-```
+---
 
-## Add a resource to your application
-The application template uses AWS Serverless Application Model (AWS SAM) to define application resources. AWS SAM is an extension of AWS CloudFormation with a simpler syntax for configuring common serverless application resources such as functions, triggers, and APIs. For resources not included in [the SAM specification](https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md), you can use standard [AWS CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html) resource types.
+## API Endpoints
 
-## Fetch, tail, and filter Lambda function logs
+All endpoints are available under the API Gateway `Prod` stage. URLs are printed in stack outputs after deployment.
 
-To simplify troubleshooting, SAM CLI has a command called `sam logs`. `sam logs` lets you fetch logs generated by your deployed Lambda function from the command line. In addition to printing the logs on the terminal, this command has several nifty features to help you quickly find the bug.
+| Method | Path       | Function        | Description                      |
+| ------ | ---------- | --------------- | -------------------------------- |
+| POST   | `/webhook` | WebhookFunction | Ingests a carrier tracking event |
+| POST   | `/track`   | TrackFunction   | Registers a new tracking number  |
+| GET    | `/track`   | ListFunction    | Returns all tracked shipments    |
 
-`NOTE`: This command works for all AWS Lambda functions; not just the ones you deploy using SAM.
+---
+
+## Local Development & Testing
+
+Build locally:
 
 ```bash
-parcel-tracker$ sam logs -n HelloWorldFunction --stack-name parcel-tracker --tail
+sam build
 ```
 
-You can find more information and examples about filtering Lambda function logs in the [SAM CLI Documentation](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-logging.html).
-
-## Unit tests
-
-Tests are defined in the `hello-world/tests` folder in this project. Use NPM to install the [Mocha test framework](https://mochajs.org/) and run unit tests.
+Invoke a function with a test event:
 
 ```bash
-parcel-tracker$ cd hello-world
-hello-world$ npm install
-hello-world$ npm run test
+sam local invoke WebhookFunction --event events/event.json
+sam local invoke TrackFunction --event events/event.json
 ```
+
+Start the full API locally on port 3000:
+
+```bash
+sam local start-api
+```
+
+Test with curl:
+
+```bash
+curl -X POST http://localhost:3000/webhook -H "Content-Type: application/json" -d @events/event.json
+curl http://localhost:3000/track
+```
+
+---
+
+## Secrets
+
+The TrackFunction reads the ShipStation API key from AWS Secrets Manager. Before deploying, create the secret:
+
+```bash
+aws secretsmanager create-secret \
+  --name "ParcelTracker/ShipStationApiKey" \
+  --secret-string '{"apiKey":"your-key-here"}'
+```
+
+The Lambda is granted `AWSSecretsManagerGetSecretValuePolicy` scoped to this exact secret ARN.
+
+---
+
+## Logs
+
+Tail live Lambda logs from the command line:
+
+```bash
+sam logs -n WebhookFunction --stack-name parcel-tracker --tail
+sam logs -n TrackFunction --stack-name parcel-tracker --tail
+```
+
+---
 
 ## Cleanup
 
-To delete the sample application that you created, use the AWS CLI. Assuming you used your project name for the stack name, you can run the following:
+To tear down the stack (DynamoDB tables are retained by design):
 
 ```bash
 sam delete --stack-name parcel-tracker
 ```
 
-## Resources
+To also remove the tables, delete them manually in the AWS Console or via CLI after the stack is gone.
 
-See the [AWS SAM developer guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/what-is-sam.html) for an introduction to SAM specification, the SAM CLI, and serverless application concepts.
+---
 
-Next, you can use AWS Serverless Application Repository to deploy ready to use Apps that go beyond hello world samples and learn how authors developed their applications: [AWS Serverless Application Repository main page](https://aws.amazon.com/serverless/serverlessrepo/)
+## Background
+
+This project grew out of a broader interest in connecting ShipStation's webhook infrastructure to a real tracking UI. It was built incrementally as a learning exercise in AWS SAM, serverless patterns, and API integration — with real ShipStation payloads used during development.
