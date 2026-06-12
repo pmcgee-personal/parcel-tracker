@@ -1,3 +1,5 @@
+// src/handlers/list/index.js
+
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DynamoDBDocumentClient,
@@ -6,18 +8,17 @@ const {
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
-
 const TABLE_NAME = process.env.SHIPMENTS_TABLE;
 
 exports.handler = async (event) => {
-  console.log("EVENT: \n" + JSON.stringify(event, null, 2));
+  console.log("EVENT: \\n" + JSON.stringify(event, null, 2));
 
   try {
     const params = {
       TableName: TABLE_NAME,
-      // ADDED actualDeliveryDate TO THIS STRING
+      // MODIFICATION: Added 'shipDate' to the ProjectionExpression
       ProjectionExpression:
-        "carrier, trackingNumber, #src, direction, statusCode, statusDescription, estimatedDeliveryDate, actualDeliveryDate, lastEventTimestamp",
+        "carrier, trackingNumber, #src, direction, statusCode, statusDescription, estimatedDeliveryDate, actualDeliveryDate, shipDate, lastEventTimestamp",
       ExpressionAttributeNames: {
         "#src": "source",
       },
@@ -26,7 +27,7 @@ exports.handler = async (event) => {
     const command = new ScanCommand(params);
     const { Items } = await docClient.send(command);
 
-    // Sort by lastEventTimestamp descending (newest activity at the top)
+    // This backend sort is now a fallback, as the primary sorting is handled on the frontend.
     Items.sort((a, b) => {
       if (!a.lastEventTimestamp) return 1;
       if (!b.lastEventTimestamp) return -1;
@@ -37,7 +38,7 @@ exports.handler = async (event) => {
       statusCode: 200,
       headers: {
         "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*", // Required for upcoming React local/prod frontend communication
+        "Access-Control-Allow-Origin": "*",
       },
       body: JSON.stringify(Items),
     };

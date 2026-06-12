@@ -148,6 +148,26 @@ export default function App() {
                       scope="col"
                       className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                     >
+                      Status
+                    </th>
+                    {/* ADD THIS NEW HEADER */}
+                    <th
+                      scope="col"
+                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                    >
+                      Shipped On
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                    >
+                      Est. Delivery
+                    </th>
+
+                    <th
+                      scope="col"
+                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                    >
                       Est. Delivery
                     </th>
                     <th
@@ -212,6 +232,33 @@ export default function App() {
                           {shipment.statusDescription}
                         </span>
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wide ${getStatusStyle(shipment.statusCode)}`}
+                        >
+                          {shipment.statusDescription}
+                        </span>
+                      </td>
+                      {/* ADD THIS NEW DATA CELL */}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                        {shipment.shipDate
+                          ? new Date(shipment.shipDate).toLocaleDateString(
+                              undefined,
+                              { month: "short", day: "numeric" },
+                            )
+                          : "—"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                        {shipment.estimatedDeliveryDate
+                          ? new Date(
+                              shipment.estimatedDeliveryDate,
+                            ).toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                            })
+                          : "—"}
+                      </td>
+
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                         {shipment.estimatedDeliveryDate
                           ? new Date(
