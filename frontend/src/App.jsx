@@ -35,11 +35,41 @@ export default function App() {
         }
         const data = await response.json();
 
-        // Sort shipments by last event timestamp, most recent first
-        const sortedData = data.sort(
-          (a, b) =>
-            new Date(b.lastEventTimestamp) - new Date(a.lastEventTimestamp),
-        );
+        // --- NEW CUSTOM SORTING LOGIC ---
+        const sortedData = data.sort((a, b) => {
+          const activeStatuses = ["IT", "EX", "AC", "OFD"];
+
+          const isA_Active = activeStatuses.includes(a.statusCode);
+          const isB_Active = activeStatuses.includes(b.statusCode);
+
+          // If one is active and the other is not, the active one comes first.
+          if (isA_Active && !isB_Active) return -1;
+          if (!isA_Active && isB_Active) return 1;
+
+          // If both are active, sort by Estimated Delivery Date (soonest first).
+          if (isA_Active && isB_Active) {
+            const dateA = a.estimatedDeliveryDate
+              ? new Date(a.estimatedDeliveryDate)
+              : null;
+            const dateB = b.estimatedDeliveryDate
+              ? new Date(b.estimatedDeliveryDate)
+              : null;
+            if (!dateA) return 1; // Put items without a date at the bottom of the active group
+            if (!dateB) return -1;
+            return dateA - dateB;
+          }
+
+          // If neither are active (e.g., both are Delivered), sort by Actual Delivery Date (newest first).
+          const dateA = a.actualDeliveryDate
+            ? new Date(a.actualDeliveryDate)
+            : null;
+          const dateB = b.actualDeliveryDate
+            ? new Date(b.actualDeliveryDate)
+            : null;
+          if (!dateA) return 1;
+          if (!dateB) return -1;
+          return dateB - dateA;
+        });
 
         setShipments(sortedData);
         setError(null);
@@ -67,20 +97,17 @@ export default function App() {
           </p>
         </header>
 
-        {/* Content States */}
-        {/* ... (no changes in this section) ... */}
+        {/* Content States (no changes here) */}
         {loading && (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
           </div>
         )}
-
         {error && (
           <div className="bg-rose-900/20 border-l-4 border-rose-500 p-4 rounded-md mb-8">
             <p className="text-sm text-rose-400">{error}</p>
           </div>
         )}
-
         {!loading && !error && shipments.length === 0 && (
           <div className="text-center py-20 bg-slate-800/50 rounded-xl shadow-lg border border-slate-700/50">
             <p className="text-lg text-slate-300">
@@ -92,7 +119,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Shipments Table */}
+        {/* Shipments Table (no changes here) */}
         {!loading && !error && shipments.length > 0 && (
           <div className="bg-slate-800/40 rounded-xl shadow-2xl border border-slate-700 overflow-hidden backdrop-blur-sm">
             <div className="overflow-x-auto">
@@ -143,7 +170,6 @@ export default function App() {
                       key={shipment.trackingNumber}
                       className="hover:bg-slate-700/30 transition-colors"
                     >
-                      {/* ... (no changes in first 3 cells) ... */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-semibold text-white tracking-wide">
                           {shipment.trackingNumber}
@@ -186,7 +212,6 @@ export default function App() {
                           {shipment.statusDescription}
                         </span>
                       </td>
-
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                         {shipment.estimatedDeliveryDate
                           ? new Date(
@@ -195,10 +220,8 @@ export default function App() {
                               month: "short",
                               day: "numeric",
                             })
-                          : "—"}{" "}
-                        {/* <-- THIS LINE WAS CHANGED */}
+                          : "—"}
                       </td>
-
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                         {shipment.actualDeliveryDate
                           ? new Date(
@@ -209,7 +232,6 @@ export default function App() {
                             })
                           : "—"}
                       </td>
-
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
                         {shipment.lastEventTimestamp
                           ? timeSince(shipment.lastEventTimestamp)
