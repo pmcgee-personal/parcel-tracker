@@ -15,8 +15,9 @@ exports.handler = async (event) => {
   try {
     const params = {
       TableName: TABLE_NAME,
+      // ADDED actualDeliveryDate TO THIS STRING
       ProjectionExpression:
-        "carrier, trackingNumber, #src, direction, statusCode, statusDescription, estimatedDeliveryDate, lastEventTimestamp",
+        "carrier, trackingNumber, #src, direction, statusCode, statusDescription, estimatedDeliveryDate, actualDeliveryDate, lastEventTimestamp",
       ExpressionAttributeNames: {
         "#src": "source",
       },
