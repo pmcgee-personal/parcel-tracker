@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { timeSince } from "./utils/timeUtils";
 
 const getStatusStyle = (code) => {
@@ -21,83 +21,132 @@ export default function App() {
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // NEW STATE: Toggle for showing all shipments
   const [showAll, setShowAll] = useState(false);
 
+  // --- NEW STATE: Form Controls ---
+  const [newTracking, setNewTracking] = useState("");
+  const [newCarrier, setNewCarrier] = useState("");
+  const [newDirection, setNewDirection] = useState("inbound");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionMessage, setActionMessage] = useState({ type: "", text: "" });
+
   const API_URL = import.meta.env.VITE_API_BASE_URL;
+  // Endpoint saved in memory for adding tracking numbers
+  const TRACK_API_URL =
+    "https://zdecoujal6.execute-api.us-west-2.amazonaws.com/Prod/track";
 
-  useEffect(() => {
-    async function fetchShipments() {
-      try {
-        setLoading(true);
-        const response = await fetch(API_URL);
-        if (!response.ok) {
-          throw new Error(`API error: ${response.statusText}`);
-        }
-        const data = await response.json();
+  // --- EXTRACTED FETCH LOGIC ---
+  const fetchShipments = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(API_URL);
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+      const data = await response.json();
 
-        // Custom Sorting Logic
-        const sortedData = data.sort((a, b) => {
-          const activeStatuses = ["IT", "EX", "AC", "OFD"];
-          const isA_Active = activeStatuses.includes(a.statusCode);
-          const isB_Active = activeStatuses.includes(b.statusCode);
+      const sortedData = data.sort((a, b) => {
+        const activeStatuses = ["IT", "EX", "AC", "OFD"];
+        const isA_Active = activeStatuses.includes(a.statusCode);
+        const isB_Active = activeStatuses.includes(b.statusCode);
 
-          if (isA_Active && !isB_Active) return -1;
-          if (!isA_Active && isB_Active) return 1;
+        if (isA_Active && !isB_Active) return -1;
+        if (!isA_Active && isB_Active) return 1;
 
-          if (isA_Active && isB_Active) {
-            const dateA = a.estimatedDeliveryDate
-              ? new Date(a.estimatedDeliveryDate)
-              : null;
-            const dateB = b.estimatedDeliveryDate
-              ? new Date(b.estimatedDeliveryDate)
-              : null;
-            if (!dateA) return 1;
-            if (!dateB) return -1;
-            return dateA - dateB;
-          }
-
-          const dateA = a.actualDeliveryDate
-            ? new Date(a.actualDeliveryDate)
+        if (isA_Active && isB_Active) {
+          const dateA = a.estimatedDeliveryDate
+            ? new Date(a.estimatedDeliveryDate)
             : null;
-          const dateB = b.actualDeliveryDate
-            ? new Date(b.actualDeliveryDate)
+          const dateB = b.estimatedDeliveryDate
+            ? new Date(b.estimatedDeliveryDate)
             : null;
           if (!dateA) return 1;
           if (!dateB) return -1;
-          return dateB - dateA;
-        });
+          return dateA - dateB;
+        }
 
-        setShipments(sortedData);
-        setError(null);
-      } catch (err) {
-        console.error("Failed to fetch shipments:", err);
-        setError("Could not load shipments. Please check your API deployment.");
-      } finally {
-        setLoading(false);
-      }
+        const dateA = a.actualDeliveryDate
+          ? new Date(a.actualDeliveryDate)
+          : null;
+        const dateB = b.actualDeliveryDate
+          ? new Date(b.actualDeliveryDate)
+          : null;
+        if (!dateA) return 1;
+        if (!dateB) return -1;
+        return dateB - dateA;
+      });
+
+      setShipments(sortedData);
+      setError(null);
+    } catch (err) {
+      console.error("Failed to fetch shipments:", err);
+      setError("Could not load shipments. Please check your API deployment.");
+    } finally {
+      setLoading(false);
     }
-    fetchShipments();
   }, [API_URL]);
 
-  // --- NEW FILTERING LOGIC ---
+  useEffect(() => {
+    fetchShipments();
+  }, [fetchShipments]);
+
+  // --- NEW LOGIC: Add Shipment ---
+  const handleAddShipment = async (e) => {
+    e.preventDefault();
+    if (!newTracking || !newCarrier) return;
+
+    setIsSubmitting(true);
+    setActionMessage({ type: "", text: "" });
+
+    try {
+      const response = await fetch(TRACK_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          trackingNumber: newTracking,
+          carrier: newCarrier.toLowerCase(),
+          direction: newDirection,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to add tracking number");
+
+      setActionMessage({
+        type: "success",
+        text: `Successfully added ${newTracking}`,
+      });
+
+      // Reset form
+      setNewTracking("");
+      setNewCarrier("");
+      setNewDirection("inbound");
+
+      // Instantly refresh the table to show the new package
+      await fetchShipments();
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setActionMessage({ type: "", text: "" }), 3000);
+    } catch (err) {
+      setActionMessage({ type: "error", text: err.message });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
   const now = Date.now();
 
   const visibleShipments = showAll
     ? shipments
     : shipments.filter((shipment) => {
-        // If it's delivered, check how old the last activity is
         if (shipment.statusCode === "DE") {
           const lastActivityTime = shipment.lastEventTimestamp
             ? new Date(shipment.lastEventTimestamp).getTime()
             : 0;
-
           const ageInMs = now - lastActivityTime;
-          return ageInMs <= THREE_DAYS_MS; // Only show if 3 days old or newer
+          return ageInMs <= THREE_DAYS_MS;
         }
-        return true; // Keep all other active shipments visible
+        return true;
       });
 
   const hasHiddenShipments = shipments.length > visibleShipments.length;
@@ -114,7 +163,89 @@ export default function App() {
           </p>
         </header>
 
-        {loading && (
+        {/* --- NEW UI: Control Panel --- */}
+        <div className="bg-slate-800/40 p-5 rounded-xl border border-slate-700 mb-8 shadow-lg backdrop-blur-sm">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            {/* Add Shipment Form */}
+            <form
+              onSubmit={handleAddShipment}
+              className="flex flex-wrap items-center gap-3 w-full md:w-auto"
+            >
+              <input
+                type="text"
+                placeholder="Tracking Number"
+                value={newTracking}
+                onChange={(e) => setNewTracking(e.target.value)}
+                required
+                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+              />
+              <select
+                value={newCarrier}
+                onChange={(e) => setNewCarrier(e.target.value)}
+                required
+                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+              >
+                <option value="" disabled>
+                  Select Carrier
+                </option>
+                <option value="fedex">FedEx</option>
+                <option value="ups">UPS</option>
+                <option value="usps">USPS</option>
+                <option value="dhl">DHL</option>
+              </select>
+              <select
+                value={newDirection}
+                onChange={(e) => setNewDirection(e.target.value)}
+                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+              >
+                <option value="inbound">Inbound</option>
+                <option value="outbound">Outbound</option>
+              </select>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md"
+              >
+                {isSubmitting ? "Adding..." : "Add Package"}
+              </button>
+            </form>
+
+            {/* Refresh Button */}
+            <button
+              onClick={fetchShipments}
+              disabled={loading}
+              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 px-4 py-2 rounded-lg text-sm font-semibold transition-colors border border-slate-600"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              Refresh Table
+            </button>
+          </div>
+
+          {/* Action Messages */}
+          {actionMessage.text && (
+            <div
+              className={`mt-4 text-sm px-4 py-2 rounded-md ${actionMessage.type === "error" ? "bg-rose-900/30 text-rose-400 border border-rose-800" : "bg-emerald-900/30 text-emerald-400 border border-emerald-800"}`}
+            >
+              {actionMessage.text}
+            </div>
+          )}
+        </div>
+
+        {/* Existing Content States */}
+        {loading && shipments.length === 0 && (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
           </div>
@@ -132,14 +263,19 @@ export default function App() {
               No tracked shipments found.
             </p>
             <p className="text-sm text-slate-500 mt-1">
-              Use the POST API to register your first package.
+              Use the form above to register your first package.
             </p>
           </div>
         )}
 
-        {!loading && !error && shipments.length > 0 && (
+        {!error && shipments.length > 0 && (
           <>
-            <div className="bg-slate-800/40 rounded-xl shadow-2xl border border-slate-700 overflow-hidden backdrop-blur-sm">
+            <div className="bg-slate-800/40 rounded-xl shadow-2xl border border-slate-700 overflow-hidden backdrop-blur-sm relative">
+              {loading && (
+                <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm z-10 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-500"></div>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-700/50">
                   <thead className="bg-slate-900/50">
@@ -276,50 +412,13 @@ export default function App() {
               </div>
             </div>
 
-            {/* Toggle Button for Hidden Shipments */}
             {(hasHiddenShipments || showAll) && (
               <div className="mt-6 flex justify-center">
                 <button
                   onClick={() => setShowAll(!showAll)}
                   className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full text-sm font-semibold transition-all border border-slate-700 shadow-md flex items-center gap-2"
                 >
-                  {showAll ? (
-                    <>
-                      Hide Older Deliveries
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={2}
-                        stroke="currentColor"
-                        className="w-4 h-4"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M4.5 15.75l7.5-7.5 7.5 7.5"
-                        />
-                      </svg>
-                    </>
-                  ) : (
-                    <>
-                      Show All Shipments
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={2}
-                        stroke="currentColor"
-                        className="w-4 h-4"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-                        />
-                      </svg>
-                    </>
-                  )}
+                  {showAll ? "Hide Older Deliveries" : "Show All Deliveries"}
                 </button>
               </div>
             )}
