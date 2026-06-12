@@ -148,22 +148,8 @@ export default function App() {
                       scope="col"
                       className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                     >
-                      Status
-                    </th>
-                    {/* ADD THIS NEW HEADER */}
-                    <th
-                      scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
-                    >
                       Shipped On
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
-                    >
-                      Est. Delivery
-                    </th>
-
                     <th
                       scope="col"
                       className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
