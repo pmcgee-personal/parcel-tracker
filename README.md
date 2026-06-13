@@ -15,6 +15,15 @@ This project was built as a learning project and personal tool, combining real S
 - Amazon DynamoDB — two tables: `Shipments` and `Events`
 - AWS Secrets Manager — stores the ShipStation API key
 - Amazon S3 + CloudFront — hosts the frontend dashboard with HTTPS redirect
+- React + Vite + Tailwind CSS — responsive, component-based frontend UI
+
+## Key Features
+
+- **Unified Dashboard**: View both Inbound and Outbound shipments in a single interface.
+- **Smart Filtering**: Automatically hides "Delivered" packages after 3 days to keep the dashboard clutter-free, with a toggle to view the full history.
+- **Expandable Timelines**: Click on any shipment to reveal a dynamically sorted dropdown containing its full event history and geographic routing.
+- **Quick Registration**: Instantly add new tracking numbers (USPS, UPS, FedEx) directly from the UI control panel.
+- **Real-Time Webhooks**: Backend automatically processes carrier push events to keep the DynamoDB tables and frontend up-to-date.
 
 ---
 
@@ -31,7 +40,8 @@ Carrier / ShipStation
                                        ──►  Writes to both tables
 
   GET  /track    ──►  ListFunction     ──►  Reads Shipments table
-                                       ──►  Returns all tracked shipments
+                                       ──►  Reads Events table
+                                       ──►  Joins data & returns nested shipments
 
   CloudFront ──► S3 Bucket ──► Frontend dashboard
 ```
@@ -44,7 +54,7 @@ Carrier / ShipStation
 parcel-tracker/
 ├── .github/workflows/       # CI/CD workflows (GitHub Actions)
 ├── events/                  # Sample JSON payloads for local Lambda testing
-├── frontend/                # Static frontend dashboard (HTML/CSS/JS)
+├── frontend/                # React/Vite/Tailwind SPA dashboard
 ├── src/
 │   └── handlers/
 │       ├── webhook/         # Ingests carrier tracking updates (POST /webhook)
@@ -199,6 +209,12 @@ sam delete --stack-name parcel-tracker
 ```
 
 To also remove the tables, delete them manually in the AWS Console or via CLI after the stack is gone.
+
+---
+
+### CI/CD Pipeline
+
+This repository includes GitHub Actions workflows (`.github/workflows/`) that automatically build, test, and deploy the AWS SAM backend and sync the React frontend to S3/CloudFront on push to the main branch.
 
 ---
 
