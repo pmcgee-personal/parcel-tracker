@@ -341,11 +341,11 @@ export default function App() {
                         shipment.trackingNumber,
                       );
 
-                      // Sort tracking events based on carrierOccurredAt timestamp
+                      // UPDATED SORTING: b - a puts the newest/latest event at the top
                       const sortedEvents = [...(shipment.events || [])].sort(
                         (a, b) =>
-                          new Date(a.carrierOccurredAt) -
-                          new Date(b.carrierOccurredAt),
+                          new Date(b.carrierOccurredAt) -
+                          new Date(a.carrierOccurredAt),
                       );
 
                       return (
