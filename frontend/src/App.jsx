@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback } from "react";
-
 import { timeSince } from "./utils/timeUtils";
 
 const getStatusStyle = (code) => {
@@ -16,6 +15,76 @@ const getStatusStyle = (code) => {
     default: // Unknown, Not Yet in System, etc.
       return "bg-slate-800 text-slate-300 border border-slate-700";
   }
+};
+
+// --- NEW COMPONENT: Estimated Delivery Date Drift Tracker with Tooltip ---
+const EstimatedDeliveryWithHistory = ({ shipment }) => {
+  if (!shipment.estimatedDeliveryDate) {
+    return <span className="text-slate-500">—</span>;
+  }
+
+  const history = shipment.estimatedDeliveryHistory || [];
+  const formattedCurrentDate = new Date(
+    shipment.estimatedDeliveryDate,
+  ).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+
+  if (history.length === 0) {
+    return <span className="text-slate-300">{formattedCurrentDate}</span>;
+  }
+
+  // Find the earliest recorded estimated delivery date
+  const originalDate = history[0].date;
+  const formattedOriginalDate = new Date(originalDate).toLocaleDateString(
+    undefined,
+    {
+      month: "short",
+      day: "numeric",
+    },
+  );
+
+  return (
+    <div className="relative flex items-center gap-1.5 group cursor-help">
+      {/* Current Estimated Date */}
+      <span className="text-white font-medium">{formattedCurrentDate}</span>
+
+      {/* Drift/Change Indicator Icon */}
+      <span className="text-amber-400 animate-pulse group-hover:text-amber-300 transition-colors">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className="w-4 h-4"
+        >
+          <path
+            fillRule="evenodd"
+            d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </span>
+
+      {/* Tailwind Hover Tooltip (Invisible by default, reveals on Hover) */}
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex flex-col w-56 p-3 bg-slate-950 text-xs text-slate-200 rounded-lg shadow-xl border border-slate-700/80 z-50 pointer-events-none">
+        <p className="font-bold text-amber-400 mb-1 flex items-center gap-1">
+          ⚠️ Delivery Date Drifted
+        </p>
+        <p className="text-slate-300 leading-relaxed">
+          Originally scheduled for{" "}
+          <strong className="text-white">{formattedOriginalDate}</strong>.
+        </p>
+        <div className="border-t border-slate-800 my-1.5"></div>
+        <p className="text-[10px] text-slate-500">
+          Rescheduled {history.length} time{history.length > 1 ? "s" : ""} by
+          carrier.
+        </p>
+        {/* Tooltip Chevron */}
+        <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-slate-950"></div>
+      </div>
+    </div>
+  );
 };
 
 export default function App() {
@@ -110,6 +179,7 @@ export default function App() {
     if (!newTracking || !newCarrier) return;
     setIsSubmitting(true);
     setActionMessage({ type: "", text: "" });
+
     try {
       const response = await fetch(TRACK_API_URL, {
         method: "POST",
@@ -121,16 +191,20 @@ export default function App() {
         }),
       });
       if (!response.ok) throw new Error("Failed to add tracking number");
+
       setActionMessage({
         type: "success",
         text: `Successfully added ${newTracking}`,
       });
+
       // Reset form
       setNewTracking("");
       setNewCarrier("");
       setNewDirection("Inbound");
+
       // Instantly refresh the table to show the new package
       await fetchShipments();
+
       // Clear success message after 3 seconds
       setTimeout(() => setActionMessage({ type: "", text: "" }), 3000);
     } catch (err) {
@@ -142,7 +216,6 @@ export default function App() {
 
   const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
   const now = Date.now();
-
   const visibleShipments = showAll
     ? shipments
     : shipments.filter((shipment) => {
@@ -340,8 +413,6 @@ export default function App() {
                       const isExpanded = expandedShipments.has(
                         shipment.trackingNumber,
                       );
-
-                      // UPDATED SORTING: b - a puts the newest/latest event at the top
                       const sortedEvents = [...(shipment.events || [])].sort(
                         (a, b) =>
                           new Date(b.carrierOccurredAt) -
@@ -448,15 +519,11 @@ export default function App() {
                                   })
                                 : "—"}
                             </td>
+                            {/* --- UPDATED CELL: Injected EstimatedDeliveryWithHistory --- */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                              {shipment.estimatedDeliveryDate
-                                ? new Date(
-                                    shipment.estimatedDeliveryDate,
-                                  ).toLocaleDateString(undefined, {
-                                    month: "short",
-                                    day: "numeric",
-                                  })
-                                : "—"}
+                              <EstimatedDeliveryWithHistory
+                                shipment={shipment}
+                              />
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               {shipment.actualDeliveryDate
@@ -511,7 +578,6 @@ export default function App() {
                                           ]
                                             .filter(Boolean)
                                             .join(", ");
-
                                           return (
                                             <tr
                                               key={index}
