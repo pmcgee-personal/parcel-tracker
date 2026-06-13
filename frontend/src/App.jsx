@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+
 import { timeSince } from "./utils/timeUtils";
 
 const getStatusStyle = (code) => {
@@ -26,14 +27,29 @@ export default function App() {
   // --- NEW STATE: Form Controls ---
   const [newTracking, setNewTracking] = useState("");
   const [newCarrier, setNewCarrier] = useState("");
-  const [newDirection, setNewDirection] = useState("inbound");
+  const [newDirection, setNewDirection] = useState("Inbound");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState({ type: "", text: "" });
 
+  // --- NEW STATE: Expandable Dropdowns ---
+  const [expandedShipments, setExpandedShipments] = useState(new Set());
+
   const API_URL = import.meta.env.VITE_API_BASE_URL;
+
   // Endpoint saved in memory for adding tracking numbers
   const TRACK_API_URL =
     "https://zdecoujal6.execute-api.us-west-2.amazonaws.com/Prod/track";
+
+  // Toggle expand/collapse state for a shipment
+  const toggleRow = (trackingNumber) => {
+    const newExpanded = new Set(expandedShipments);
+    if (newExpanded.has(trackingNumber)) {
+      newExpanded.delete(trackingNumber);
+    } else {
+      newExpanded.add(trackingNumber);
+    }
+    setExpandedShipments(newExpanded);
+  };
 
   // --- EXTRACTED FETCH LOGIC ---
   const fetchShipments = useCallback(async () => {
@@ -44,7 +60,6 @@ export default function App() {
         throw new Error(`API error: ${response.statusText}`);
       }
       const data = await response.json();
-
       const sortedData = data.sort((a, b) => {
         const activeStatuses = ["IT", "EX", "AC", "OFD"];
         const isA_Active = activeStatuses.includes(a.statusCode);
@@ -75,7 +90,6 @@ export default function App() {
         if (!dateB) return -1;
         return dateB - dateA;
       });
-
       setShipments(sortedData);
       setError(null);
     } catch (err) {
@@ -94,10 +108,8 @@ export default function App() {
   const handleAddShipment = async (e) => {
     e.preventDefault();
     if (!newTracking || !newCarrier) return;
-
     setIsSubmitting(true);
     setActionMessage({ type: "", text: "" });
-
     try {
       const response = await fetch(TRACK_API_URL, {
         method: "POST",
@@ -108,22 +120,17 @@ export default function App() {
           direction: newDirection,
         }),
       });
-
       if (!response.ok) throw new Error("Failed to add tracking number");
-
       setActionMessage({
         type: "success",
         text: `Successfully added ${newTracking}`,
       });
-
       // Reset form
       setNewTracking("");
       setNewCarrier("");
-      setNewDirection("inbound");
-
+      setNewDirection("Inbound");
       // Instantly refresh the table to show the new package
       await fetchShipments();
-
       // Clear success message after 3 seconds
       setTimeout(() => setActionMessage({ type: "", text: "" }), 3000);
     } catch (err) {
@@ -279,6 +286,11 @@ export default function App() {
                 <table className="min-w-full divide-y divide-slate-700/50">
                   <thead className="bg-slate-900/50">
                     <tr>
+                      {/* Expansion Header Toggle Column */}
+                      <th
+                        scope="col"
+                        className="w-12 px-4 py-4 text-center"
+                      ></th>
                       <th
                         scope="col"
                         className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
@@ -324,88 +336,215 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/50 bg-transparent">
-                    {visibleShipments.map((shipment) => (
-                      <tr
-                        key={shipment.trackingNumber}
-                        className="hover:bg-slate-700/30 transition-colors"
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-semibold text-white tracking-wide">
-                            {shipment.trackingNumber}
-                          </div>
-                          <div className="text-xs text-slate-500 uppercase mt-0.5 font-medium tracking-wider">
-                            {shipment.carrier}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center gap-x-2 px-2.5 py-1 rounded-full text-xs font-medium border ${shipment.direction === "Inbound" ? "bg-blue-900/30 text-blue-400 border-blue-800/50" : "bg-purple-900/30 text-purple-400 border-purple-800/50"}`}
+                    {visibleShipments.map((shipment) => {
+                      const isExpanded = expandedShipments.has(
+                        shipment.trackingNumber,
+                      );
+
+                      // Sort tracking events based on carrierOccuredAt timestamp
+                      const sortedEvents = [...(shipment.events || [])].sort(
+                        (a, b) =>
+                          new Date(a.carrierOccuredAt) -
+                          new Date(b.carrierOccuredAt),
+                      );
+
+                      return (
+                        <React.Fragment key={shipment.trackingNumber}>
+                          {/* Main Row */}
+                          <tr
+                            className={`hover:bg-slate-700/30 transition-colors ${isExpanded ? "bg-slate-800/30" : ""}`}
                           >
-                            {shipment.direction === "Inbound" ? (
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-4 w-4"
-                                viewBox="0 0 20 20"
-                                fill="currentColor"
+                            {/* Toggle Button Cell */}
+                            <td className="px-4 py-4 whitespace-nowrap text-center text-sm font-medium">
+                              <button
+                                onClick={() =>
+                                  toggleRow(shipment.trackingNumber)
+                                }
+                                className="text-slate-400 hover:text-cyan-400 transition-colors focus:outline-none"
+                                aria-label={
+                                  isExpanded
+                                    ? "Collapse History"
+                                    : "Expand History"
+                                }
                               >
-                                <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-                              </svg>
-                            ) : (
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-4 w-4"
-                                viewBox="0 0 20 20"
-                                fill="currentColor"
+                                {isExpanded ? (
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                  >
+                                    <path
+                                      fillRule="evenodd"
+                                      d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                      clipRule="evenodd"
+                                    />
+                                  </svg>
+                                ) : (
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                  >
+                                    <path
+                                      fillRule="evenodd"
+                                      d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                                      clipRule="evenodd"
+                                    />
+                                  </svg>
+                                )}
+                              </button>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-semibold text-white tracking-wide">
+                                {shipment.trackingNumber}
+                              </div>
+                              <div className="text-xs text-slate-500 uppercase mt-0.5 font-medium tracking-wider">
+                                {shipment.carrier}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center gap-x-2 px-2.5 py-1 rounded-full text-xs font-medium border ${shipment.direction === "Inbound" ? "bg-blue-900/30 text-blue-400 border-blue-800/50" : "bg-purple-900/30 text-purple-400 border-purple-800/50"}`}
                               >
-                                <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
-                                <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v5.05a2.5 2.5 0 014.9 0H19a1 1 0 001-1V8a1 1 0 00-1-1h-5z" />
-                              </svg>
-                            )}
-                            {shipment.direction}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wide ${getStatusStyle(shipment.statusCode)}`}
-                          >
-                            {shipment.statusDescription}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                          {shipment.shipDate
-                            ? new Date(shipment.shipDate).toLocaleDateString(
-                                undefined,
-                                { month: "short", day: "numeric" },
-                              )
-                            : "—"}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                          {shipment.estimatedDeliveryDate
-                            ? new Date(
-                                shipment.estimatedDeliveryDate,
-                              ).toLocaleDateString(undefined, {
-                                month: "short",
-                                day: "numeric",
-                              })
-                            : "—"}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                          {shipment.actualDeliveryDate
-                            ? new Date(
-                                shipment.actualDeliveryDate,
-                              ).toLocaleDateString(undefined, {
-                                month: "short",
-                                day: "numeric",
-                              })
-                            : "—"}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
-                          {shipment.lastEventTimestamp
-                            ? timeSince(shipment.lastEventTimestamp)
-                            : "No events recorded"}
-                        </td>
-                      </tr>
-                    ))}
+                                {shipment.direction === "Inbound" ? (
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-4 w-4"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                  >
+                                    <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                                  </svg>
+                                ) : (
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-4 w-4"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                  >
+                                    <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+                                    <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v5.05a2.5 2.5 0 014.9 0H19a1 1 0 001-1V8a1 1 0 00-1-1h-5z" />
+                                  </svg>
+                                )}
+                                {shipment.direction}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wide ${getStatusStyle(shipment.statusCode)}`}
+                              >
+                                {shipment.statusDescription}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                              {shipment.shipDate
+                                ? new Date(
+                                    shipment.shipDate,
+                                  ).toLocaleDateString(undefined, {
+                                    month: "short",
+                                    day: "numeric",
+                                  })
+                                : "—"}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                              {shipment.estimatedDeliveryDate
+                                ? new Date(
+                                    shipment.estimatedDeliveryDate,
+                                  ).toLocaleDateString(undefined, {
+                                    month: "short",
+                                    day: "numeric",
+                                  })
+                                : "—"}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                              {shipment.actualDeliveryDate
+                                ? new Date(
+                                    shipment.actualDeliveryDate,
+                                  ).toLocaleDateString(undefined, {
+                                    month: "short",
+                                    day: "numeric",
+                                  })
+                                : "—"}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
+                              {shipment.lastEventTimestamp
+                                ? timeSince(shipment.lastEventTimestamp)
+                                : "No events recorded"}
+                            </td>
+                          </tr>
+
+                          {/* Expandable Shipment Event History Row */}
+                          {isExpanded && (
+                            <tr className="bg-slate-900/60 border-t border-b border-slate-800/80">
+                              <td colSpan={8} className="px-8 py-5">
+                                <div className="border border-slate-700/60 rounded-xl overflow-hidden bg-slate-900 shadow-inner">
+                                  <div className="bg-slate-800/40 px-5 py-3 border-b border-slate-700/60 flex justify-between items-center">
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                      Tracking Events & Timeline
+                                    </h4>
+                                    <span className="text-xs text-slate-500 font-medium">
+                                      Total events: {sortedEvents.length}
+                                    </span>
+                                  </div>
+                                  {sortedEvents.length > 0 ? (
+                                    <table className="min-w-full divide-y divide-slate-800 text-sm">
+                                      <thead className="bg-slate-950/40">
+                                        <tr>
+                                          <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                            Occurred At
+                                          </th>
+                                          <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                            Description
+                                          </th>
+                                          <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                            Location
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-800 bg-transparent">
+                                        {sortedEvents.map((event, index) => {
+                                          const location = [
+                                            event.cityLocality,
+                                            event.stateProvince,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(", ");
+
+                                          return (
+                                            <tr
+                                              key={index}
+                                              className="hover:bg-slate-800/20 transition-colors"
+                                            >
+                                              <td className="px-5 py-3 whitespace-nowrap text-slate-400 font-mono text-xs">
+                                                {new Date(
+                                                  event.carrierOccuredAt,
+                                                ).toLocaleString()}
+                                              </td>
+                                              <td className="px-5 py-3 text-slate-200 font-medium text-xs">
+                                                {event.description}
+                                              </td>
+                                              <td className="px-5 py-3 text-slate-400 text-xs italic">
+                                                {location || "In Transit"}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  ) : (
+                                    <div className="p-6 text-center text-sm text-slate-500 italic">
+                                      No events recorded yet.
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
