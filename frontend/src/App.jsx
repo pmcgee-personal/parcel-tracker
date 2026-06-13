@@ -341,11 +341,11 @@ export default function App() {
                         shipment.trackingNumber,
                       );
 
-                      // Sort tracking events based on carrierOccuredAt timestamp
+                      // Sort tracking events based on carrierOccurredAt timestamp
                       const sortedEvents = [...(shipment.events || [])].sort(
                         (a, b) =>
-                          new Date(a.carrierOccuredAt) -
-                          new Date(b.carrierOccuredAt),
+                          new Date(a.carrierOccurredAt) -
+                          new Date(b.carrierOccurredAt),
                       );
 
                       return (
@@ -519,7 +519,7 @@ export default function App() {
                                             >
                                               <td className="px-5 py-3 whitespace-nowrap text-slate-400 font-mono text-xs">
                                                 {new Date(
-                                                  event.carrierOccuredAt,
+                                                  event.carrierOccurredAt,
                                                 ).toLocaleString()}
                                               </td>
                                               <td className="px-5 py-3 text-slate-200 font-medium text-xs">
