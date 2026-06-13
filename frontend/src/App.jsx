@@ -197,8 +197,8 @@ export default function App() {
                 onChange={(e) => setNewDirection(e.target.value)}
                 className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
               >
-                <option value="inbound">Inbound</option>
-                <option value="outbound">Outbound</option>
+                <option value="Inbound">Inbound</option>
+                <option value="Outbound">Outbound</option>
               </select>
               <button
                 type="submit"
