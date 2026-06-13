@@ -1,10 +1,9 @@
-// src/handlers/webhook/index.js
-
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DynamoDBDocumentClient,
   PutCommand,
   UpdateCommand,
+  GetCommand, // NEW: Added GetCommand
 } = require("@aws-sdk/lib-dynamodb");
 
 const ddbClient = new DynamoDBClient({
@@ -45,33 +44,75 @@ exports.handler = async (event) => {
         }),
       };
 
+    // 1. Fetch the existing shipment to check for date changes
+    let existingEdd = null;
+    try {
+      const getResult = await docClient.send(
+        new GetCommand({
+          TableName: SHIPMENTS_TABLE,
+          Key: { trackingNumber },
+        }),
+      );
+      if (getResult.Item) {
+        existingEdd = getResult.Item.estimatedDeliveryDate || null;
+      }
+    } catch (err) {
+      console.warn(
+        "Could not retrieve existing shipment for comparison:",
+        err.message,
+      );
+    }
+
     // Find the most recent event from the incoming webhook payload.
     const latestEvent = data.events?.sort(
       (a, b) => new Date(b.occurred_at) - new Date(a.occurred_at),
     )[0];
 
+    const incomingEdd = data.estimated_delivery_date || null;
+
+    // 2. Build the base Update parameters
+    let updateExpression =
+      "SET statusCode = :sc, carrierDetailCode = :cdc, statusDescription = :sd, carrierStatusCode = :csc, carrierStatusDescription = :csd, shipDate = :sdDate, estimatedDeliveryDate = :edd, actualDeliveryDate = :ad, exceptionDescription = :ed, updatedAt = :u, lastEventTimestamp = :let";
+
+    let expressionAttributeValues = {
+      ":sc": data.status_code || "UNKNOWN",
+      ":cdc": data.carrier_detail_code || null,
+      ":sd": data.status_description || "No description",
+      ":csc": data.carrier_status_code || null,
+      ":csd": data.carrier_status_description || null,
+      ":sdDate": data.ship_date || null,
+      ":edd": incomingEdd,
+      ":ad": data.actual_delivery_date || null,
+      ":ed": data.exception_description || null,
+      ":u": new Date().toISOString(),
+      // BUG FIX applied here: Safely fall back to null if undefined to avoid DynamoDB errors
+      ":let": latestEvent
+        ? latestEvent.occurred_at
+        : data.last_event?.occurred_at || null,
+    };
+
+    // 3. If dates differ, dynamically add the history append logic to the update command
+    if (existingEdd && incomingEdd && existingEdd !== incomingEdd) {
+      console.log(
+        `Detected EDD change via webhook from ${existingEdd} to ${incomingEdd}. Logging history.`,
+      );
+      updateExpression +=
+        ", estimatedDeliveryHistory = list_append(if_not_exists(estimatedDeliveryHistory, :empty_list), :new_history)";
+
+      expressionAttributeValues[":empty_list"] = [];
+      expressionAttributeValues[":new_history"] = [
+        {
+          date: existingEdd,
+          recordedAt: new Date().toISOString(),
+        },
+      ];
+    }
+
     const shipmentParams = {
       TableName: SHIPMENTS_TABLE,
       Key: { trackingNumber },
-      // BUG FIX: Added lastEventTimestamp to the UpdateExpression.
-      UpdateExpression:
-        "SET statusCode = :sc, carrierDetailCode = :cdc, statusDescription = :sd, carrierStatusCode = :csc, carrierStatusDescription = :csd, shipDate = :sdDate, estimatedDeliveryDate = :edd, actualDeliveryDate = :ad, exceptionDescription = :ed, updatedAt = :u, lastEventTimestamp = :let",
-      ExpressionAttributeValues: {
-        ":sc": data.status_code || "UNKNOWN",
-        ":cdc": data.carrier_detail_code || null,
-        ":sd": data.status_description || "No description",
-        ":csc": data.carrier_status_code || null,
-        ":csd": data.carrier_status_description || null,
-        ":sdDate": data.ship_date || null,
-        ":edd": data.estimated_delivery_date || null,
-        ":ad": data.actual_delivery_date || null,
-        ":ed": data.exception_description || null,
-        ":u": new Date().toISOString(),
-        // BUG FIX: Set the lastEventTimestamp from the most recent event in the payload.
-        ":let": latestEvent
-          ? latestEvent.occurred_at
-          : data.last_event?.occurred_at,
-      },
+      UpdateExpression: updateExpression,
+      ExpressionAttributeValues: expressionAttributeValues,
     };
 
     console.log(`Updating shipment details for: ${trackingNumber}`);
@@ -109,7 +150,6 @@ exports.handler = async (event) => {
           longitude: trackingEvent.longitude || null,
           createdAt: new Date().toISOString(),
         },
-        // BUG FIX: Corrected ConditionExpression to only check the composite key (trackingNumber + occurredAt).
         ConditionExpression: "attribute_not_exists(occurredAt)",
       };
 

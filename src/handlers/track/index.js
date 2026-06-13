@@ -1,7 +1,9 @@
-// src/handlers/track/index.js
-
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
+const {
+  DynamoDBDocumentClient,
+  PutCommand,
+  GetCommand,
+} = require("@aws-sdk/lib-dynamodb");
 const {
   SecretsManagerClient,
   GetSecretValueCommand,
@@ -16,6 +18,7 @@ const secretsClient = new SecretsManagerClient({
 const SHIPMENTS_TABLE = process.env.SHIPMENTS_TABLE;
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
 const SECRET_NAME = process.env.SECRET_NAME;
+
 let shipStationApiKey = null;
 
 const getApiKey = async () => {
@@ -51,8 +54,8 @@ exports.handler = async (event) => {
     console.log(
       `Fetching initial tracking data for ${trackingNumber} from ShipEngine API...`,
     );
-    const apiUrl = `https://api.shipengine.com/v1/tracking?carrier_code=${carrier}&tracking_number=${trackingNumber}`;
 
+    const apiUrl = `https://api.shipengine.com/v1/tracking?carrier_code=${carrier}&tracking_number=${trackingNumber}`;
     const response = await fetch(apiUrl, {
       method: "GET",
       headers: { "API-Key": apiKey, "Content-Type": "application/json" },
@@ -67,6 +70,46 @@ exports.handler = async (event) => {
     }
 
     const trackingData = await response.json();
+
+    // 1. Fetch the existing shipment to check for previous estimated delivery date
+    let existingHistory = [];
+    let oldEstimatedDeliveryDate = null;
+
+    try {
+      const getCommand = new GetCommand({
+        TableName: SHIPMENTS_TABLE,
+        Key: { trackingNumber: trackingData.tracking_number },
+      });
+      const getResult = await docClient.send(getCommand);
+
+      if (getResult.Item) {
+        existingHistory = getResult.Item.estimatedDeliveryHistory || [];
+        oldEstimatedDeliveryDate = getResult.Item.estimatedDeliveryDate || null;
+      }
+    } catch (dbErr) {
+      console.warn(
+        "Could not retrieve existing shipment (might be a new package):",
+        dbErr.message,
+      );
+    }
+
+    const newEstimatedDeliveryDate =
+      trackingData.estimated_delivery_date || null;
+
+    // 2. Track change if old date exists, new date exists, and they are different
+    if (
+      oldEstimatedDeliveryDate &&
+      newEstimatedDeliveryDate &&
+      oldEstimatedDeliveryDate !== newEstimatedDeliveryDate
+    ) {
+      console.log(
+        `Detected estimated delivery date change from ${oldEstimatedDeliveryDate} to ${newEstimatedDeliveryDate}. Logging to history.`,
+      );
+      existingHistory.push({
+        date: oldEstimatedDeliveryDate,
+        recordedAt: new Date().toISOString(),
+      });
+    }
 
     const shipmentItem = {
       trackingNumber: trackingData.tracking_number,
@@ -83,7 +126,8 @@ exports.handler = async (event) => {
       carrierStatusCode: trackingData.carrier_status_code || null,
       carrierStatusDescription: trackingData.carrier_status_description || null,
       shipDate: trackingData.ship_date || null,
-      estimatedDeliveryDate: trackingData.estimated_delivery_date || null,
+      estimatedDeliveryDate: newEstimatedDeliveryDate,
+      estimatedDeliveryHistory: existingHistory, // 3. Save the updated history list
       actualDeliveryDate: trackingData.actual_delivery_date || null,
       exceptionDescription: trackingData.exception_description || null,
     };
@@ -92,8 +136,12 @@ exports.handler = async (event) => {
       TableName: SHIPMENTS_TABLE,
       Item: shipmentItem,
     });
+
     await docClient.send(shipmentPutCommand);
-    console.log("Initial shipment record written.");
+    console.log(
+      "Shipment record written with history size:",
+      existingHistory.length,
+    );
 
     if (trackingData.events && trackingData.events.length > 0) {
       for (const trackingEvent of trackingData.events) {
@@ -120,10 +168,7 @@ exports.handler = async (event) => {
             latitude: trackingEvent.latitude || null,
             longitude: trackingEvent.longitude || null,
           },
-          // BUG FIX: Removed ConditionExpression that prevented saving multiple initial events.
         });
-
-        // This will now correctly overwrite events if they somehow already exist, ensuring data consistency.
         await docClient.send(eventPutCommand);
       }
       console.log(`Initial events written: ${trackingData.events.length}`);
@@ -133,7 +178,7 @@ exports.handler = async (event) => {
       statusCode: 200,
       headers: {
         "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*", // Allows your frontend domain to read the response
+        "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST,OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
       },
@@ -145,7 +190,7 @@ exports.handler = async (event) => {
       statusCode: 500,
       headers: {
         "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*", // Allows your frontend domain to read the response
+        "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST,OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
       },
