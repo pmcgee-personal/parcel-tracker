@@ -115,9 +115,14 @@ Resources:
       Environment:
         Variables:
           SHIPMENTS_TABLE: !Ref ShipmentsTable
+          # --- NEW: Added Events Table Environment Variable ---
+          EVENTS_TABLE: !Ref EventsTable
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref ShipmentsTable
+        # --- NEW: Added Read Permissions for the Events Table ---
+        - DynamoDBReadPolicy:
+            TableName: !Ref EventsTable
       Events:
         ListApi:
           Type: Api

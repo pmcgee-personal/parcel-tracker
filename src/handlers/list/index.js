@@ -1,5 +1,4 @@
 // src/handlers/list/index.js
-
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DynamoDBDocumentClient,
@@ -8,15 +7,18 @@ const {
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
+
 const TABLE_NAME = process.env.SHIPMENTS_TABLE;
+// NEW: Make sure to pass the events table name in your SAM template.yaml!
+const EVENTS_TABLE = process.env.EVENTS_TABLE;
 
 exports.handler = async (event) => {
-  console.log("EVENT: \\n" + JSON.stringify(event, null, 2));
+  console.log("EVENT: \n" + JSON.stringify(event, null, 2));
 
   try {
+    // 1. Scan Shipments
     const params = {
       TableName: TABLE_NAME,
-      // MODIFICATION: Added 'shipDate' to the ProjectionExpression
       ProjectionExpression:
         "carrier, trackingNumber, #src, direction, statusCode, statusDescription, estimatedDeliveryDate, actualDeliveryDate, shipDate, lastEventTimestamp",
       ExpressionAttributeNames: {
@@ -25,10 +27,34 @@ exports.handler = async (event) => {
     };
 
     const command = new ScanCommand(params);
-    const { Items } = await docClient.send(command);
+    const { Items: shipmentItems } = await docClient.send(command);
 
-    // This backend sort is now a fallback, as the primary sorting is handled on the frontend.
-    Items.sort((a, b) => {
+    // 2. Scan Events
+    let eventItems = [];
+    if (EVENTS_TABLE) {
+      const eventsCommand = new ScanCommand({ TableName: EVENTS_TABLE });
+      const eventsResponse = await docClient.send(eventsCommand);
+      eventItems = eventsResponse.Items || [];
+    } else {
+      console.warn(
+        "EVENTS_TABLE environment variable is missing. Events will not be loaded.",
+      );
+    }
+
+    // 3. Map events to their respective shipments
+    const shipmentsWithEvents = shipmentItems.map((shipment) => {
+      const shipmentEvents = eventItems.filter(
+        (e) => e.trackingNumber === shipment.trackingNumber,
+      );
+
+      return {
+        ...shipment,
+        events: shipmentEvents,
+      };
+    });
+
+    // 4. Fallback sorting (primary sorting is on frontend)
+    shipmentsWithEvents.sort((a, b) => {
       if (!a.lastEventTimestamp) return 1;
       if (!b.lastEventTimestamp) return -1;
       return new Date(b.lastEventTimestamp) - new Date(a.lastEventTimestamp);
@@ -40,7 +66,7 @@ exports.handler = async (event) => {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
       },
-      body: JSON.stringify(Items),
+      body: JSON.stringify(shipmentsWithEvents),
     };
   } catch (error) {
     console.error("Error retrieving shipments:", error);
