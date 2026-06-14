@@ -17,7 +17,7 @@ const getStatusStyle = (code) => {
   }
 };
 
-// --- NEW COMPONENT: Estimated Delivery Date Drift Tracker with Tooltip ---
+// --- NEW COMPONENT: Smarter Estimated Delivery Date Drift Tracker ---
 const EstimatedDeliveryWithHistory = ({ shipment }) => {
   if (!shipment.estimatedDeliveryDate) {
     return <span className="text-slate-500">—</span>;
@@ -45,31 +45,84 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
     },
   );
 
+  // Calculate Drift Direction
+  const currentTimestamp = new Date(shipment.estimatedDeliveryDate).setHours(
+    0,
+    0,
+    0,
+    0,
+  );
+  const originalTimestamp = new Date(originalDate).setHours(0, 0, 0, 0);
+
+  let iconColor = "text-amber-400 group-hover:text-amber-300";
+  let titleColor = "text-amber-400";
+  let driftText = "Date Changed";
+  let IconSVG = (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className="w-4 h-4"
+    >
+      <path
+        fillRule="evenodd"
+        d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+
+  if (currentTimestamp > originalTimestamp) {
+    // Delayed (Later)
+    iconColor = "text-rose-400 group-hover:text-rose-300";
+    titleColor = "text-rose-400";
+    driftText = "Delivery Delayed";
+    IconSVG = (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        className="w-4 h-4"
+      >
+        <path
+          fillRule="evenodd"
+          d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v4.59L7.3 9.24a.75.75 0 0 0-1.1 1.02l3.25 3.5a.75.75 0 0 0 1.1 0l3.25-3.5a.75.75 0 1 0-1.1-1.02l-1.95 2.1V6.75Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    );
+  } else if (currentTimestamp < originalTimestamp) {
+    // Early (Earlier)
+    iconColor = "text-emerald-400 group-hover:text-emerald-300";
+    titleColor = "text-emerald-400";
+    driftText = "Arriving Early";
+    IconSVG = (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        className="w-4 h-4"
+      >
+        <path
+          fillRule="evenodd"
+          d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-.75-4.75a.75.75 0 0 0 1.5 0V8.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0L6.2 9.74a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    );
+  }
+
   return (
     <div className="relative flex items-center gap-1.5 group cursor-help">
-      {/* Current Estimated Date */}
       <span className="text-white font-medium">{formattedCurrentDate}</span>
 
-      {/* Drift/Change Indicator Icon */}
-      <span className="text-amber-400 animate-pulse group-hover:text-amber-300 transition-colors">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          className="w-4 h-4"
-        >
-          <path
-            fillRule="evenodd"
-            d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
-            clipRule="evenodd"
-          />
-        </svg>
+      <span className={`${iconColor} animate-pulse transition-colors`}>
+        {IconSVG}
       </span>
 
-      {/* Tailwind Hover Tooltip (Invisible by default, reveals on Hover) */}
       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex flex-col w-56 p-3 bg-slate-950 text-xs text-slate-200 rounded-lg shadow-xl border border-slate-700/80 z-50 pointer-events-none">
-        <p className="font-bold text-amber-400 mb-1 flex items-center gap-1">
-          ⚠️ Delivery Date Drifted
+        <p className={`font-bold ${titleColor} mb-1 flex items-center gap-1`}>
+          {driftText}
         </p>
         <p className="text-slate-300 leading-relaxed">
           Originally scheduled for{" "}
@@ -80,7 +133,6 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
           Rescheduled {history.length} time{history.length > 1 ? "s" : ""} by
           carrier.
         </p>
-        {/* Tooltip Chevron */}
         <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-slate-950"></div>
       </div>
     </div>
@@ -93,23 +145,20 @@ export default function App() {
   const [error, setError] = useState(null);
   const [showAll, setShowAll] = useState(false);
 
-  // --- NEW STATE: Form Controls ---
+  // Form Controls
   const [newTracking, setNewTracking] = useState("");
   const [newCarrier, setNewCarrier] = useState("");
   const [newDirection, setNewDirection] = useState("Inbound");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState({ type: "", text: "" });
 
-  // --- NEW STATE: Expandable Dropdowns ---
+  // Expandable Dropdowns
   const [expandedShipments, setExpandedShipments] = useState(new Set());
 
   const API_URL = import.meta.env.VITE_API_BASE_URL;
-
-  // Endpoint saved in memory for adding tracking numbers
   const TRACK_API_URL =
     "https://zdecoujal6.execute-api.us-west-2.amazonaws.com/Prod/track";
 
-  // Toggle expand/collapse state for a shipment
   const toggleRow = (trackingNumber) => {
     const newExpanded = new Set(expandedShipments);
     if (newExpanded.has(trackingNumber)) {
@@ -120,7 +169,6 @@ export default function App() {
     setExpandedShipments(newExpanded);
   };
 
-  // --- EXTRACTED FETCH LOGIC ---
   const fetchShipments = useCallback(async () => {
     try {
       setLoading(true);
@@ -173,7 +221,6 @@ export default function App() {
     fetchShipments();
   }, [fetchShipments]);
 
-  // --- NEW LOGIC: Add Shipment ---
   const handleAddShipment = async (e) => {
     e.preventDefault();
     if (!newTracking || !newCarrier) return;
@@ -190,6 +237,7 @@ export default function App() {
           direction: newDirection,
         }),
       });
+
       if (!response.ok) throw new Error("Failed to add tracking number");
 
       setActionMessage({
@@ -197,15 +245,12 @@ export default function App() {
         text: `Successfully added ${newTracking}`,
       });
 
-      // Reset form
       setNewTracking("");
       setNewCarrier("");
       setNewDirection("Inbound");
 
-      // Instantly refresh the table to show the new package
       await fetchShipments();
 
-      // Clear success message after 3 seconds
       setTimeout(() => setActionMessage({ type: "", text: "" }), 3000);
     } catch (err) {
       setActionMessage({ type: "error", text: err.message });
@@ -223,8 +268,7 @@ export default function App() {
           const lastActivityTime = shipment.lastEventTimestamp
             ? new Date(shipment.lastEventTimestamp).getTime()
             : 0;
-          const ageInMs = now - lastActivityTime;
-          return ageInMs <= THREE_DAYS_MS;
+          return now - lastActivityTime <= THREE_DAYS_MS;
         }
         return true;
       });
@@ -243,10 +287,9 @@ export default function App() {
           </p>
         </header>
 
-        {/* --- NEW UI: Control Panel --- */}
+        {/* Control Panel */}
         <div className="bg-slate-800/40 p-5 rounded-xl border border-slate-700 mb-8 shadow-lg backdrop-blur-sm">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            {/* Add Shipment Form */}
             <form
               onSubmit={handleAddShipment}
               className="flex flex-wrap items-center gap-3 w-full md:w-auto"
@@ -289,7 +332,6 @@ export default function App() {
               </button>
             </form>
 
-            {/* Refresh Button */}
             <button
               onClick={fetchShipments}
               disabled={loading}
@@ -313,7 +355,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Action Messages */}
           {actionMessage.text && (
             <div
               className={`mt-4 text-sm px-4 py-2 rounded-md ${actionMessage.type === "error" ? "bg-rose-900/30 text-rose-400 border border-rose-800" : "bg-emerald-900/30 text-emerald-400 border border-emerald-800"}`}
@@ -323,7 +364,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Existing Content States */}
+        {/* Load/Error/Empty States */}
         {loading && shipments.length === 0 && (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
@@ -347,6 +388,7 @@ export default function App() {
           </div>
         )}
 
+        {/* Main Table */}
         {!error && shipments.length > 0 && (
           <>
             <div className="bg-slate-800/40 rounded-xl shadow-2xl border border-slate-700 overflow-hidden backdrop-blur-sm relative">
@@ -359,7 +401,6 @@ export default function App() {
                 <table className="min-w-full divide-y divide-slate-700/50">
                   <thead className="bg-slate-900/50">
                     <tr>
-                      {/* Expansion Header Toggle Column */}
                       <th
                         scope="col"
                         className="w-12 px-4 py-4 text-center"
@@ -421,22 +462,16 @@ export default function App() {
 
                       return (
                         <React.Fragment key={shipment.trackingNumber}>
-                          {/* Main Row */}
                           <tr
                             className={`hover:bg-slate-700/30 transition-colors ${isExpanded ? "bg-slate-800/30" : ""}`}
                           >
-                            {/* Toggle Button Cell */}
+                            {/* Expand Toggle */}
                             <td className="px-4 py-4 whitespace-nowrap text-center text-sm font-medium">
                               <button
                                 onClick={() =>
                                   toggleRow(shipment.trackingNumber)
                                 }
                                 className="text-slate-400 hover:text-cyan-400 transition-colors focus:outline-none"
-                                aria-label={
-                                  isExpanded
-                                    ? "Collapse History"
-                                    : "Expand History"
-                                }
                               >
                                 {isExpanded ? (
                                   <svg
@@ -467,6 +502,7 @@ export default function App() {
                                 )}
                               </button>
                             </td>
+                            {/* Tracking Info */}
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm font-semibold text-white tracking-wide">
                                 {shipment.trackingNumber}
@@ -475,6 +511,7 @@ export default function App() {
                                 {shipment.carrier}
                               </div>
                             </td>
+                            {/* Direction */}
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span
                                 className={`inline-flex items-center gap-x-2 px-2.5 py-1 rounded-full text-xs font-medium border ${shipment.direction === "Inbound" ? "bg-blue-900/30 text-blue-400 border-blue-800/50" : "bg-purple-900/30 text-purple-400 border-purple-800/50"}`}
@@ -502,6 +539,7 @@ export default function App() {
                                 {shipment.direction}
                               </span>
                             </td>
+                            {/* Status */}
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span
                                 className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wide ${getStatusStyle(shipment.statusCode)}`}
@@ -509,6 +547,7 @@ export default function App() {
                                 {shipment.statusDescription}
                               </span>
                             </td>
+                            {/* Shipped On */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               {shipment.shipDate
                                 ? new Date(
@@ -519,12 +558,13 @@ export default function App() {
                                   })
                                 : "—"}
                             </td>
-                            {/* --- UPDATED CELL: Injected EstimatedDeliveryWithHistory --- */}
+                            {/* Est Delivery (With Drift Component) */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               <EstimatedDeliveryWithHistory
                                 shipment={shipment}
                               />
                             </td>
+                            {/* Delivered On */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               {shipment.actualDeliveryDate
                                 ? new Date(
@@ -535,6 +575,7 @@ export default function App() {
                                   })
                                 : "—"}
                             </td>
+                            {/* Last Activity */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
                               {shipment.lastEventTimestamp
                                 ? timeSince(shipment.lastEventTimestamp)
@@ -542,7 +583,7 @@ export default function App() {
                             </td>
                           </tr>
 
-                          {/* Expandable Shipment Event History Row */}
+                          {/* Expanded History Row */}
                           {isExpanded && (
                             <tr className="bg-slate-900/60 border-t border-b border-slate-800/80">
                               <td colSpan={8} className="px-8 py-5">
@@ -616,6 +657,7 @@ export default function App() {
               </div>
             </div>
 
+            {/* Pagination / Show All */}
             {(hasHiddenShipments || showAll) && (
               <div className="mt-6 flex justify-center">
                 <button

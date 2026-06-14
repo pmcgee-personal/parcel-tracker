@@ -1,4 +1,3 @@
-// src/handlers/list/index.js
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DynamoDBDocumentClient,
@@ -9,7 +8,6 @@ const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
 
 const TABLE_NAME = process.env.SHIPMENTS_TABLE;
-// NEW: Make sure to pass the events table name in your SAM template.yaml!
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
 
 exports.handler = async (event) => {
@@ -19,8 +17,9 @@ exports.handler = async (event) => {
     // 1. Scan Shipments
     const params = {
       TableName: TABLE_NAME,
+      // BUG FIX: Added estimatedDeliveryHistory to the ProjectionExpression
       ProjectionExpression:
-        "carrier, trackingNumber, #src, direction, statusCode, statusDescription, estimatedDeliveryDate, actualDeliveryDate, shipDate, lastEventTimestamp",
+        "carrier, trackingNumber, #src, direction, statusCode, statusDescription, estimatedDeliveryDate, estimatedDeliveryHistory, actualDeliveryDate, shipDate, lastEventTimestamp",
       ExpressionAttributeNames: {
         "#src": "source",
       },
@@ -46,7 +45,6 @@ exports.handler = async (event) => {
       const shipmentEvents = eventItems.filter(
         (e) => e.trackingNumber === shipment.trackingNumber,
       );
-
       return {
         ...shipment,
         events: shipmentEvents,
