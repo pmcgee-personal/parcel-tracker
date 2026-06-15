@@ -39,7 +39,7 @@ exports.handler = async (event) => {
 
   try {
     const body = JSON.parse(event.body);
-    const { trackingNumber, carrier, direction, source } = body;
+    const { trackingNumber, carrier, direction, source, serviceLevel } = body;
 
     if (!trackingNumber || !carrier) {
       return {
@@ -116,6 +116,7 @@ exports.handler = async (event) => {
       carrier: carrier,
       direction: direction || null,
       source: source || null,
+      serviceLevel: serviceLevel || null,
       lastEventTimestamp:
         trackingData.events?.[0]?.occurred_at || new Date().toISOString(),
       createdAt: new Date().toISOString(),

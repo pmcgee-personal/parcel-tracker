@@ -149,6 +149,7 @@ export default function App() {
   const [newTracking, setNewTracking] = useState("");
   const [newCarrier, setNewCarrier] = useState("");
   const [newDirection, setNewDirection] = useState("Inbound");
+  const [newServiceLevel, setNewServiceLevel] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState({ type: "", text: "" });
 
@@ -235,6 +236,7 @@ export default function App() {
           trackingNumber: newTracking,
           carrier: newCarrier.toLowerCase(),
           direction: newDirection,
+          serviceLevel: newServiceLevel,
         }),
       });
 
@@ -248,6 +250,7 @@ export default function App() {
       setNewTracking("");
       setNewCarrier("");
       setNewDirection("Inbound");
+      setNewServiceLevel("");
 
       await fetchShipments();
 
@@ -300,6 +303,13 @@ export default function App() {
                 value={newTracking}
                 onChange={(e) => setNewTracking(e.target.value)}
                 required
+                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+              />
+              <input
+                type="text"
+                placeholder="Service Level (Optional)"
+                value={newServiceLevel}
+                onChange={(e) => setNewServiceLevel(e.target.value)}
                 className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
               />
               <select
@@ -508,7 +518,12 @@ export default function App() {
                                 {shipment.trackingNumber}
                               </div>
                               <div className="text-xs text-slate-500 uppercase mt-0.5 font-medium tracking-wider">
-                                {shipment.carrier}
+                                {shipment.carrier}{" "}
+                                {shipment.serviceLevel && (
+                                  <span className="text-slate-400 normal-case italic">
+                                    — {shipment.serviceLevel}
+                                  </span>
+                                )}
                               </div>
                             </td>
                             {/* Direction */}

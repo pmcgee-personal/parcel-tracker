@@ -19,7 +19,7 @@ exports.handler = async (event) => {
       TableName: TABLE_NAME,
       // BUG FIX: Added estimatedDeliveryHistory to the ProjectionExpression
       ProjectionExpression:
-        "carrier, trackingNumber, #src, direction, statusCode, statusDescription, estimatedDeliveryDate, estimatedDeliveryHistory, actualDeliveryDate, shipDate, lastEventTimestamp",
+        "carrier, trackingNumber, #src, direction, statusCode, statusDescription, estimatedDeliveryDate, estimatedDeliveryHistory, actualDeliveryDate, shipDate, lastEventTimestamp, serviceLevel",
       ExpressionAttributeNames: {
         "#src": "source",
       },
