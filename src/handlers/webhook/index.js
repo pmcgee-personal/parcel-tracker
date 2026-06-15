@@ -26,14 +26,25 @@ async function sendPushNotification(data) {
 
   const trackingNumber = data.tracking_number;
   const statusCode = data.status_code;
-  const carrierStatusDescription = data.carrier_status_description || "";
 
-  // Evaluate notification rules
+  // 1. Get descriptions safely and convert to lowercase for case-insensitive matching
+  const topLevelDesc = (data.carrier_status_description || "").toLowerCase();
+
+  let latestEventDesc = "";
+  if (data.events && data.events.length > 0) {
+    const sortedEvents = data.events.sort(
+      (a, b) => new Date(b.occurred_at) - new Date(a.occurred_at),
+    );
+    latestEventDesc = (sortedEvents[0].description || "").toLowerCase();
+  }
+
+  // 2. Evaluate notification rules
   const isDelivered = statusCode === "DE";
   const isException = statusCode === "EX";
   const isOutForDelivery =
     statusCode === "IT" &&
-    carrierStatusDescription.toLowerCase().includes("out for delivery");
+    (topLevelDesc.includes("out for delivery") ||
+      latestEventDesc.includes("out for delivery"));
 
   // Exit early if it doesn't match our criteria
   if (!isDelivered && !isException && !isOutForDelivery) {
@@ -46,16 +57,16 @@ async function sendPushNotification(data) {
   let tags = "package";
 
   if (isDelivered) {
-    title = "🎉 Package Delivered!";
+    title = "Package Delivered!"; // Removed emoji, ntfy will use the "tada" tag below
     message = `Your package ${trackingNumber} has been successfully delivered.`;
     tags = "tada,white_check_mark";
   } else if (isException) {
-    title = "⚠️ Exception Alert";
-    message = `Alert: Exception occurred on package ${trackingNumber}. Info: ${carrierStatusDescription}`;
+    title = "Exception Alert";
+    message = `Alert: Exception occurred on package ${trackingNumber}.`;
     priority = "high";
     tags = "warning,exclamation";
   } else if (isOutForDelivery) {
-    title = "🚚 Out for Delivery!";
+    title = "Out for Delivery!";
     message = `Get ready! Package ${trackingNumber} is out for delivery today.`;
     tags = "truck";
   }
@@ -63,7 +74,7 @@ async function sendPushNotification(data) {
   try {
     const response = await fetch(ntfyUrl, {
       method: "POST",
-      body: message,
+      body: message, // Emojis in the BODY are perfectly fine, just not in headers!
       headers: {
         Title: title,
         Priority: priority,
