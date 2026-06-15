@@ -150,6 +150,7 @@ export default function App() {
   const [newCarrier, setNewCarrier] = useState("");
   const [newDirection, setNewDirection] = useState("Inbound");
   const [newServiceLevel, setNewServiceLevel] = useState("");
+  const [newSource, setNewSource] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState({ type: "", text: "" });
 
@@ -237,6 +238,7 @@ export default function App() {
           carrier: newCarrier.toLowerCase(),
           direction: newDirection,
           serviceLevel: newServiceLevel,
+          source: newSource,
         }),
       });
 
@@ -251,6 +253,7 @@ export default function App() {
       setNewCarrier("");
       setNewDirection("Inbound");
       setNewServiceLevel("");
+      setNewSource("");
 
       await fetchShipments();
 
@@ -305,13 +308,6 @@ export default function App() {
                 required
                 className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
               />
-              <input
-                type="text"
-                placeholder="Service Level (Optional)"
-                value={newServiceLevel}
-                onChange={(e) => setNewServiceLevel(e.target.value)}
-                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
-              />
               <select
                 value={newCarrier}
                 onChange={(e) => setNewCarrier(e.target.value)}
@@ -325,6 +321,21 @@ export default function App() {
                 <option value="ups">UPS</option>
                 <option value="stamps_com">USPS</option>
               </select>
+              <input
+                type="text"
+                placeholder="Service Level (Optional)"
+                value={newServiceLevel}
+                onChange={(e) => setNewServiceLevel(e.target.value)}
+                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+              />
+              <input
+                type="text"
+                placeholder="Source (Hidden Data)"
+                value={newSource}
+                onChange={(e) => setNewSource(e.target.value)}
+                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+              />
+
               <select
                 value={newDirection}
                 onChange={(e) => setNewDirection(e.target.value)}
