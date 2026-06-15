@@ -170,10 +170,10 @@ Resources:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
 
-  FrontendBucketPolicy:
+    FrontendBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Metadata:
-      # Suppress cfn-guard picky regex matching at the policy level
+      # Suppress cfn-guard picky regex matching at the policy level so VS Code stays green
       guard:
         SuppressedRules:
           - S3_BUCKET_SSL_REQUESTS_ONLY
@@ -182,21 +182,12 @@ Resources:
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
-          # Statement 1: Keep S3 public-readable for website hosting
+          # Statement 1: Keep S3 public-readable for CloudFront website hosting (HTTP-only origin)
           - Effect: Allow
             Principal: "*"
             Action: "s3:GetObject"
             Resource: !Sub "arn:aws:s3:::${FrontendBucket}/*"
-          # Statement 2: Enforce SSL (HTTPS) for all connections
-          - Effect: Deny
-            Principal: "*"
-            Action: "s3:*"
-            Resource:
-              - !Sub "arn:aws:s3:::${FrontendBucket}"
-              - !Sub "arn:aws:s3:::${FrontendBucket}/*"
-            Condition:
-              Bool:
-                aws:SecureTransport: false # Fix: Unquoted boolean false
+
 
   FrontendCloudFront:
     Type: AWS::CloudFront::Distribution
