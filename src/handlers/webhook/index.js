@@ -150,6 +150,18 @@ exports.handler = async (event) => {
 
     const incomingEdd = data.estimated_delivery_date || null;
 
+    // --- NEW: Helper to extract just the YYYY-MM-DD calendar date ---
+    const getDateOnly = (dateString) => {
+      if (!dateString) return null;
+      // Splits "2026-06-15T14:30:00Z" at the "T" and takes just "2026-06-15"
+      return dateString.includes("T")
+        ? dateString.split("T")[0]
+        : dateString.substring(0, 10);
+    };
+
+    const existingDateString = getDateOnly(existingEdd);
+    const incomingDateString = getDateOnly(incomingEdd);
+
     // 2. Build the base Update parameters
     let updateExpression =
       "SET statusCode = :sc, carrierDetailCode = :cdc, statusDescription = :sd, carrierStatusCode = :csc, carrierStatusDescription = :csd, shipDate = :sdDate, estimatedDeliveryDate = :edd, actualDeliveryDate = :ad, exceptionDescription = :ed, updatedAt = :u, lastEventTimestamp = :let";
@@ -170,17 +182,21 @@ exports.handler = async (event) => {
         : data.last_event?.occurred_at || null,
     };
 
-    // 3. If dates differ, dynamically add the history append logic to the update command
-    if (existingEdd && incomingEdd && existingEdd !== incomingEdd) {
+    // 3. If the CALENDAR dates differ, dynamically add the history append logic
+    if (
+      existingDateString &&
+      incomingDateString &&
+      existingDateString !== incomingDateString
+    ) {
       console.log(
-        `Detected EDD change via webhook from ${existingEdd} to ${incomingEdd}. Logging history.`,
+        `Detected EDD date change via webhook from ${existingDateString} to ${incomingDateString}. Logging history.`,
       );
       updateExpression +=
         ", estimatedDeliveryHistory = list_append(if_not_exists(estimatedDeliveryHistory, :empty_list), :new_history)";
       expressionAttributeValues[":empty_list"] = [];
       expressionAttributeValues[":new_history"] = [
         {
-          date: existingEdd,
+          date: existingEdd, // Keep the full original timestamp in history
           recordedAt: new Date().toISOString(),
         },
       ];
