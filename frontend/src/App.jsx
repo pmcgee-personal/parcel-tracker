@@ -17,13 +17,27 @@ const getStatusStyle = (code) => {
   }
 };
 
-// --- NEW COMPONENT: Smarter Estimated Delivery Date Drift Tracker ---
+// --- NEW COMPONENT: Smarter Estimated Delivery Date Drift Tracker (with Option B filter) ---
 const EstimatedDeliveryWithHistory = ({ shipment }) => {
   if (!shipment.estimatedDeliveryDate) {
     return <span className="text-slate-500">—</span>;
   }
 
-  const history = shipment.estimatedDeliveryHistory || [];
+  // Option B: Extract current EDD calendar day (YYYY-MM-DD)
+  const currentEddDate = shipment.estimatedDeliveryDate
+    ? shipment.estimatedDeliveryDate.split("T")[0]
+    : null;
+
+  // Option B: Filter out history entries that are actually on the exact same calendar day
+  const filteredHistory = (shipment.estimatedDeliveryHistory || []).filter(
+    (historyItem) => {
+      const historyDate = historyItem.date
+        ? historyItem.date.split("T")[0]
+        : null;
+      return historyDate && historyDate !== currentEddDate;
+    },
+  );
+
   const formattedCurrentDate = new Date(
     shipment.estimatedDeliveryDate,
   ).toLocaleDateString(undefined, {
@@ -31,12 +45,13 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
     day: "numeric",
   });
 
-  if (history.length === 0) {
+  // If there's no real historical day changes, just render the current date normally
+  if (filteredHistory.length === 0) {
     return <span className="text-slate-300">{formattedCurrentDate}</span>;
   }
 
   // Find the earliest recorded estimated delivery date
-  const originalDate = history[0].date;
+  const originalDate = filteredHistory[0].date;
   const formattedOriginalDate = new Date(originalDate).toLocaleDateString(
     undefined,
     {
@@ -115,11 +130,9 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
   return (
     <div className="relative flex items-center gap-1.5 group cursor-help">
       <span className="text-white font-medium">{formattedCurrentDate}</span>
-
       <span className={`${iconColor} animate-pulse transition-colors`}>
         {IconSVG}
       </span>
-
       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex flex-col w-56 p-3 bg-slate-950 text-xs text-slate-200 rounded-lg shadow-xl border border-slate-700/80 z-50 pointer-events-none">
         <p className={`font-bold ${titleColor} mb-1 flex items-center gap-1`}>
           {driftText}
@@ -130,10 +143,10 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
         </p>
         <div className="border-t border-slate-800 my-1.5"></div>
         <p className="text-[10px] text-slate-500">
-          Rescheduled {history.length} time{history.length > 1 ? "s" : ""} by
-          carrier.
+          Rescheduled {filteredHistory.length} time
+          {filteredHistory.length > 1 ? "s" : ""} by carrier.
         </p>
-        <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-transparent border-t-slate-950"></div>
+        <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px\undefined] border-r-[6px] border-t-[6px] border-transparent border-t-slate-950"></div>
       </div>
     </div>
   );
@@ -209,6 +222,7 @@ export default function App() {
         if (!dateB) return -1;
         return dateB - dateA;
       });
+
       setShipments(sortedData);
       setError(null);
     } catch (err) {
@@ -226,6 +240,7 @@ export default function App() {
   const handleAddShipment = async (e) => {
     e.preventDefault();
     if (!newTracking || !newCarrier) return;
+
     setIsSubmitting(true);
     setActionMessage({ type: "", text: "" });
 
@@ -254,9 +269,7 @@ export default function App() {
       setNewDirection("Inbound");
       setNewServiceLevel("");
       setNewSource("");
-
       await fetchShipments();
-
       setTimeout(() => setActionMessage({ type: "", text: "" }), 3000);
     } catch (err) {
       setActionMessage({ type: "error", text: err.message });
@@ -267,6 +280,7 @@ export default function App() {
 
   const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
   const now = Date.now();
+
   const visibleShipments = showAll
     ? shipments
     : shipments.filter((shipment) => {
@@ -335,7 +349,6 @@ export default function App() {
                 onChange={(e) => setNewSource(e.target.value)}
                 className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
               />
-
               <select
                 value={newDirection}
                 onChange={(e) => setNewDirection(e.target.value)}
@@ -523,6 +536,7 @@ export default function App() {
                                 )}
                               </button>
                             </td>
+
                             {/* Tracking Info */}
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm font-semibold text-white tracking-wide">
@@ -537,6 +551,7 @@ export default function App() {
                                 )}
                               </div>
                             </td>
+
                             {/* Direction */}
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span
@@ -565,6 +580,7 @@ export default function App() {
                                 {shipment.direction}
                               </span>
                             </td>
+
                             {/* Status */}
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span
@@ -573,6 +589,7 @@ export default function App() {
                                 {shipment.statusDescription}
                               </span>
                             </td>
+
                             {/* Shipped On */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               {shipment.shipDate
@@ -584,12 +601,14 @@ export default function App() {
                                   })
                                 : "—"}
                             </td>
+
                             {/* Est Delivery (With Drift Component) */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               <EstimatedDeliveryWithHistory
                                 shipment={shipment}
                               />
                             </td>
+
                             {/* Delivered On */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               {shipment.actualDeliveryDate
@@ -601,6 +620,7 @@ export default function App() {
                                   })
                                 : "—"}
                             </td>
+
                             {/* Last Activity */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
                               {shipment.lastEventTimestamp
