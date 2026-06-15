@@ -4,6 +4,15 @@ Description: >
   parcel-tracker
   A personal package tracking dashboard for inbound and outbound shipments.
 
+# -----------------------------------------------------------------------------
+# PARAMETERS
+# -----------------------------------------------------------------------------
+Parameters:
+  NtfyUrl:
+    Type: String
+    Description: "The unique ntfy.sh channel URL used for sending push notifications"
+    NoEcho: true # Hides the value in CloudFormation logs and the AWS Console
+
 Globals:
   Function:
     Timeout: 10 # 10 seconds to allow time for external API calls and database operations
@@ -66,6 +75,7 @@ Resources:
         Variables:
           SHIPMENTS_TABLE: !Ref ShipmentsTable
           EVENTS_TABLE: !Ref EventsTable
+          NTFY_URL: !Ref NtfyUrl # <--- INJECTING PARAMETER HERE SECURELY
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ShipmentsTable
@@ -177,9 +187,11 @@ Outputs:
   WebhookApiUrl:
     Description: "API Gateway endpoint URL for the Webhook Ingestion endpoint"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/webhook"
+
   TrackApiUrl:
     Description: "API Gateway endpoint URL for the Track API endpoint"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/track"
+
   ListApiUrl:
     Description: "API Gateway endpoint URL for the List API endpoint (GET)"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/track"
@@ -188,9 +200,11 @@ Outputs:
   FrontendBucketName:
     Description: "Name of the S3 bucket hosting the frontend"
     Value: !Ref FrontendBucket
+
   CloudFrontDistributionId:
     Description: "ID of the CloudFront distribution"
     Value: !Ref FrontendCloudFront
+
   CloudFrontDomainName:
     Description: "Public URL of your React dashboard"
     Value: !Sub "https://${FrontendCloudFront.DomainName}"

@@ -3,7 +3,7 @@ const {
   DynamoDBDocumentClient,
   PutCommand,
   UpdateCommand,
-  GetCommand, // NEW: Added GetCommand
+  GetCommand,
 } = require("@aws-sdk/lib-dynamodb");
 
 const ddbClient = new DynamoDBClient({
@@ -13,6 +13,73 @@ const docClient = DynamoDBDocumentClient.from(ddbClient);
 
 const SHIPMENTS_TABLE = process.env.SHIPMENTS_TABLE || "Shipments";
 const EVENTS_TABLE = process.env.EVENTS_TABLE || "Events";
+
+// NEW: Helper function to evaluate and send push notifications
+async function sendPushNotification(data) {
+  const ntfyUrl = process.env.NTFY_URL;
+  if (!ntfyUrl) {
+    console.warn(
+      "NTFY_URL environment variable is not set. Skipping notification.",
+    );
+    return;
+  }
+
+  const trackingNumber = data.tracking_number;
+  const statusCode = data.status_code;
+  const carrierStatusDescription = data.carrier_status_description || "";
+
+  // Evaluate notification rules
+  const isDelivered = statusCode === "DE";
+  const isException = statusCode === "EX";
+  const isOutForDelivery =
+    statusCode === "IT" &&
+    carrierStatusDescription.toLowerCase().includes("out for delivery");
+
+  // Exit early if it doesn't match our criteria
+  if (!isDelivered && !isException && !isOutForDelivery) {
+    return;
+  }
+
+  let title = "Parcel Update";
+  let message = `Package ${trackingNumber} status updated.`;
+  let priority = "default";
+  let tags = "package";
+
+  if (isDelivered) {
+    title = "🎉 Package Delivered!";
+    message = `Your package ${trackingNumber} has been successfully delivered.`;
+    tags = "tada,white_check_mark";
+  } else if (isException) {
+    title = "⚠️ Exception Alert";
+    message = `Alert: Exception occurred on package ${trackingNumber}. Info: ${carrierStatusDescription}`;
+    priority = "high";
+    tags = "warning,exclamation";
+  } else if (isOutForDelivery) {
+    title = "🚚 Out for Delivery!";
+    message = `Get ready! Package ${trackingNumber} is out for delivery today.`;
+    tags = "truck";
+  }
+
+  try {
+    const response = await fetch(ntfyUrl, {
+      method: "POST",
+      body: message,
+      headers: {
+        Title: title,
+        Priority: priority,
+        Tags: tags,
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`ntfy responded with HTTP ${response.status}`);
+    } else {
+      console.log(`Successfully sent push notification for ${trackingNumber}`);
+    }
+  } catch (error) {
+    console.error("Failed to send push notification via ntfy:", error);
+  }
+}
 
 exports.handler = async (event) => {
   console.log("Received webhook event:", JSON.stringify(event, null, 2));
@@ -36,6 +103,7 @@ exports.handler = async (event) => {
       };
 
     const trackingNumber = data.tracking_number;
+
     if (!trackingNumber)
       return {
         statusCode: 400,
@@ -53,6 +121,7 @@ exports.handler = async (event) => {
           Key: { trackingNumber },
         }),
       );
+
       if (getResult.Item) {
         existingEdd = getResult.Item.estimatedDeliveryDate || null;
       }
@@ -85,7 +154,6 @@ exports.handler = async (event) => {
       ":ad": data.actual_delivery_date || null,
       ":ed": data.exception_description || null,
       ":u": new Date().toISOString(),
-      // BUG FIX applied here: Safely fall back to null if undefined to avoid DynamoDB errors
       ":let": latestEvent
         ? latestEvent.occurred_at
         : data.last_event?.occurred_at || null,
@@ -98,7 +166,6 @@ exports.handler = async (event) => {
       );
       updateExpression +=
         ", estimatedDeliveryHistory = list_append(if_not_exists(estimatedDeliveryHistory, :empty_list), :new_history)";
-
       expressionAttributeValues[":empty_list"] = [];
       expressionAttributeValues[":new_history"] = [
         {
@@ -117,6 +184,11 @@ exports.handler = async (event) => {
 
     console.log(`Updating shipment details for: ${trackingNumber}`);
     await docClient.send(new UpdateCommand(shipmentParams));
+
+    // ==============================================================
+    // NEW: TRIGGER NOTIFICATION AFTER SUCCESSFUL SHIPMENT UPDATE
+    // ==============================================================
+    await sendPushNotification(data);
 
     const trackingEvents = data.events || [];
     let newEventsCount = 0,

@@ -1,5 +1,4 @@
 # .github/workflows/deploy.yml
-
 name: Deploy Parcel Tracker
 
 on:
@@ -13,6 +12,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -31,8 +31,13 @@ jobs:
         run: sam build --use-container
 
       - name: SAM Deploy
-        # MODIFIED LINE: Added --no-fail-on-empty-changeset
-        run: sam deploy --no-confirm-changeset --stack-name parcel-tracker-stack --no-fail-on-empty-changeset
+        # MODIFIED LINE: Added --parameter-overrides to inject the NTFY_URL secret securely
+        run: >
+          sam deploy 
+          --no-confirm-changeset 
+          --stack-name parcel-tracker-stack 
+          --no-fail-on-empty-changeset 
+          --parameter-overrides NtfyUrl="${{ secrets.NTFY_URL }}"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
