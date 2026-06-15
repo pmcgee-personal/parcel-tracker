@@ -15,7 +15,7 @@ Parameters:
 
 Globals:
   Function:
-    Timeout: 10 # 10 seconds to allow time for external API calls and database operations
+    Timeout: 20 # 20 seconds to allow time for external API calls and database operations
     Runtime: nodejs22.x
   Api:
     Cors:

@@ -11,6 +11,7 @@ const {
 
 const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(ddbClient);
+
 const secretsClient = new SecretsManagerClient({
   region: process.env.AWS_REGION,
 });
@@ -29,6 +30,14 @@ const getApiKey = async () => {
   const secret = JSON.parse(response.SecretString);
   shipStationApiKey = secret.ShipStationApiKey;
   return shipStationApiKey;
+};
+
+// --- NEW: Helper to extract just the YYYY-MM-DD calendar date ---
+const getDateOnly = (dateString) => {
+  if (!dateString) return null;
+  return dateString.includes("T")
+    ? dateString.split("T")[0]
+    : dateString.substring(0, 10);
 };
 
 exports.handler = async (event) => {
@@ -51,11 +60,12 @@ exports.handler = async (event) => {
     }
 
     const apiKey = await getApiKey();
+
     console.log(
       `Fetching initial tracking data for ${trackingNumber} from ShipEngine API...`,
     );
-
     const apiUrl = `https://api.shipengine.com/v1/tracking?carrier_code=${carrier}&tracking_number=${trackingNumber}`;
+
     const response = await fetch(apiUrl, {
       method: "GET",
       headers: { "API-Key": apiKey, "Content-Type": "application/json" },
@@ -96,17 +106,16 @@ exports.handler = async (event) => {
     const newEstimatedDeliveryDate =
       trackingData.estimated_delivery_date || null;
 
-    // 2. Track change if old date exists, new date exists, and they are different
-    if (
-      oldEstimatedDeliveryDate &&
-      newEstimatedDeliveryDate &&
-      oldEstimatedDeliveryDate !== newEstimatedDeliveryDate
-    ) {
+    const oldDateString = getDateOnly(oldEstimatedDeliveryDate);
+    const newDateString = getDateOnly(newEstimatedDeliveryDate);
+
+    // 2. Track change if old date exists, new date exists, and CALENDAR dates are different
+    if (oldDateString && newDateString && oldDateString !== newDateString) {
       console.log(
-        `Detected estimated delivery date change from ${oldEstimatedDeliveryDate} to ${newEstimatedDeliveryDate}. Logging to history.`,
+        `Detected estimated delivery date change from ${oldDateString} to ${newDateString}. Logging to history.`,
       );
       existingHistory.push({
-        date: oldEstimatedDeliveryDate,
+        date: oldEstimatedDeliveryDate, // Keep the full original timestamp
         recordedAt: new Date().toISOString(),
       });
     }
