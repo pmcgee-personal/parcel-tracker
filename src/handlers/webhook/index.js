@@ -15,7 +15,7 @@ const SHIPMENTS_TABLE = process.env.SHIPMENTS_TABLE || "Shipments";
 const EVENTS_TABLE = process.env.EVENTS_TABLE || "Events";
 
 // NEW: Helper function to evaluate and send push notifications
-async function sendPushNotification(data) {
+async function sendPushNotification(data, direction, source) {
   const ntfyUrl = process.env.NTFY_URL;
   if (!ntfyUrl) {
     console.warn(
@@ -51,30 +51,41 @@ async function sendPushNotification(data) {
     return;
   }
 
+  // 3. Gracefully build the package identification sentence
+  // Pattern: "Your (direction) (source) package (trackingNumber)"
+  const packageParts = ["Your"];
+  if (direction) packageParts.push(direction.toLowerCase()); // E.g., "inbound"
+  if (source) packageParts.push(source); // E.g., "eBay"
+  packageParts.push("package");
+  packageParts.push(trackingNumber);
+
+  // Joins arrays cleanly by space, ignoring nulls/empty elements perfectly
+  const pkgString = packageParts.join(" ");
+
   let title = "Parcel Update";
-  let message = `Package ${trackingNumber} status updated.`;
+  let message = `${pkgString} status updated.`;
   let priority = "default";
   let tags = "package";
 
   if (isDelivered) {
-    title = "Package Delivered!"; // Removed emoji, ntfy will use the "tada" tag below
-    message = `Your package ${trackingNumber} has been successfully delivered.`;
+    title = "Package Delivered!";
+    message = `${pkgString} has been successfully delivered.`;
     tags = "tada,white_check_mark";
   } else if (isException) {
     title = "Exception Alert";
-    message = `Alert: Exception occurred on package ${trackingNumber}.`;
+    message = `Alert: Exception occurred on ${pkgString}.`;
     priority = "high";
     tags = "warning,exclamation";
   } else if (isOutForDelivery) {
     title = "Out for Delivery!";
-    message = `Get ready! Package ${trackingNumber} is out for delivery today.`;
+    message = `Get ready! ${pkgString} is out for delivery today.`;
     tags = "truck";
   }
 
   try {
     const response = await fetch(ntfyUrl, {
       method: "POST",
-      body: message, // Emojis in the BODY are perfectly fine, just not in headers!
+      body: message,
       headers: {
         Title: title,
         Priority: priority,
@@ -123,8 +134,11 @@ exports.handler = async (event) => {
         }),
       };
 
-    // 1. Fetch the existing shipment to check for date changes
+    // 1. Fetch the existing shipment to check for date changes & grab metadata
     let existingEdd = null;
+    let direction = null;
+    let source = null;
+
     try {
       const getResult = await docClient.send(
         new GetCommand({
@@ -135,6 +149,8 @@ exports.handler = async (event) => {
 
       if (getResult.Item) {
         existingEdd = getResult.Item.estimatedDeliveryDate || null;
+        direction = getResult.Item.direction || null;
+        source = getResult.Item.source || null;
       }
     } catch (err) {
       console.warn(
@@ -153,7 +169,6 @@ exports.handler = async (event) => {
     // --- NEW: Helper to extract just the YYYY-MM-DD calendar date ---
     const getDateOnly = (dateString) => {
       if (!dateString) return null;
-      // Splits "2026-06-15T14:30:00Z" at the "T" and takes just "2026-06-15"
       return dateString.includes("T")
         ? dateString.split("T")[0]
         : dateString.substring(0, 10);
@@ -196,7 +211,7 @@ exports.handler = async (event) => {
       expressionAttributeValues[":empty_list"] = [];
       expressionAttributeValues[":new_history"] = [
         {
-          date: existingEdd, // Keep the full original timestamp in history
+          date: existingEdd,
           recordedAt: new Date().toISOString(),
         },
       ];
@@ -215,7 +230,7 @@ exports.handler = async (event) => {
     // ==============================================================
     // NEW: TRIGGER NOTIFICATION AFTER SUCCESSFUL SHIPMENT UPDATE
     // ==============================================================
-    await sendPushNotification(data);
+    await sendPushNotification(data, direction, source);
 
     const trackingEvents = data.events || [];
     let newEventsCount = 0,
