@@ -303,7 +303,8 @@ export default function App() {
             Where Is <span className="text-cyan-400">My Order?</span>
           </h1>
           <p className="mt-3 text-lg text-slate-400">
-            Real-time inbound and outbound shipments
+            Real-time inbound and outbound shipments to the Kramer-McGee
+            household
           </p>
         </header>
 
