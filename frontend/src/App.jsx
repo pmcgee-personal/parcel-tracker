@@ -17,18 +17,16 @@ const getStatusStyle = (code) => {
   }
 };
 
-// --- NEW COMPONENT: Smarter Estimated Delivery Date Drift Tracker (with Option B filter) ---
+// --- COMPONENT: Estimated Delivery Date Drift Tracker ---
 const EstimatedDeliveryWithHistory = ({ shipment }) => {
   if (!shipment.estimatedDeliveryDate) {
     return <span className="text-slate-500">—</span>;
   }
 
-  // Option B: Extract current EDD calendar day (YYYY-MM-DD)
   const currentEddDate = shipment.estimatedDeliveryDate
     ? shipment.estimatedDeliveryDate.split("T")[0]
     : null;
 
-  // Option B: Filter out history entries that are actually on the exact same calendar day
   const filteredHistory = (shipment.estimatedDeliveryHistory || []).filter(
     (historyItem) => {
       const historyDate = historyItem.date
@@ -45,22 +43,16 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
     day: "numeric",
   });
 
-  // If there's no real historical day changes, just render the current date normally
   if (filteredHistory.length === 0) {
     return <span className="text-slate-300">{formattedCurrentDate}</span>;
   }
 
-  // Find the earliest recorded estimated delivery date
   const originalDate = filteredHistory[0].date;
   const formattedOriginalDate = new Date(originalDate).toLocaleDateString(
     undefined,
-    {
-      month: "short",
-      day: "numeric",
-    },
+    { month: "short", day: "numeric" },
   );
 
-  // Calculate Drift Direction
   const currentTimestamp = new Date(shipment.estimatedDeliveryDate).setHours(
     0,
     0,
@@ -88,7 +80,6 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
   );
 
   if (currentTimestamp > originalTimestamp) {
-    // Delayed (Later)
     iconColor = "text-rose-400 group-hover:text-rose-300";
     titleColor = "text-rose-400";
     driftText = "Delivery Delayed";
@@ -107,7 +98,6 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
       </svg>
     );
   } else if (currentTimestamp < originalTimestamp) {
-    // Early (Earlier)
     iconColor = "text-emerald-400 group-hover:text-emerald-300";
     titleColor = "text-emerald-400";
     driftText = "Arriving Early";
@@ -128,16 +118,12 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
   }
 
   return (
-    <div className="relative flex items-center gap-1.5 group cursor-help">
+    // FIX 1: Changed cursor-help to cursor-default
+    <div className="relative flex items-center gap-1.5 group cursor-default">
       <span className="text-white font-medium">{formattedCurrentDate}</span>
       <span className={`${iconColor} animate-pulse transition-colors`}>
         {IconSVG}
       </span>
-      {/* 
-        FIX: Removed 'bottom-full' and 'mb-2' 
-        Added dynamic placement: 'group-hover:block' and 'top-6' so it drops DOWN instead of up, 
-        preventing 'overflow-hidden' from clipping it at the top of the table.
-      */}
       <div className="absolute top-6 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col w-56 p-3 bg-slate-950 text-xs text-slate-200 rounded-lg shadow-xl border border-slate-700/80 z-50 pointer-events-none">
         <p className={`font-bold ${titleColor} mb-1 flex items-center gap-1`}>
           {driftText}
@@ -151,7 +137,124 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
           Rescheduled {filteredHistory.length} time
           {filteredHistory.length > 1 ? "s" : ""} by carrier.
         </p>
-        {/* Adjusted little arrow to point UPWARDS instead of down */}
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-b-[6px] border-transparent border-b-slate-950"></div>
+      </div>
+    </div>
+  );
+};
+
+// --- NEW COMPONENT: Actual Delivery Drift Tracker ---
+const DeliveredOnWithDrift = ({ shipment }) => {
+  if (!shipment.actualDeliveryDate) {
+    return <span className="text-slate-500">—</span>;
+  }
+
+  const formattedActualDate = new Date(
+    shipment.actualDeliveryDate,
+  ).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+
+  if (!shipment.estimatedDeliveryDate) {
+    return <span className="text-slate-300">{formattedActualDate}</span>;
+  }
+
+  // Find the original expected date
+  const currentEddDate = shipment.estimatedDeliveryDate.split("T")[0];
+  const filteredHistory = (shipment.estimatedDeliveryHistory || []).filter(
+    (historyItem) => {
+      const historyDate = historyItem.date
+        ? historyItem.date.split("T")[0]
+        : null;
+      return historyDate && historyDate !== currentEddDate;
+    },
+  );
+
+  const originalEdd =
+    filteredHistory.length > 0
+      ? filteredHistory[0].date
+      : shipment.estimatedDeliveryDate;
+
+  const actualTimestamp = new Date(shipment.actualDeliveryDate).setHours(
+    0,
+    0,
+    0,
+    0,
+  );
+  const originalTimestamp = new Date(originalEdd).setHours(0, 0, 0, 0);
+
+  // If delivered on exactly the original scheduled date, show no tooltip
+  if (actualTimestamp === originalTimestamp) {
+    return <span className="text-slate-300">{formattedActualDate}</span>;
+  }
+
+  const formattedOriginalDate = new Date(originalEdd).toLocaleDateString(
+    undefined,
+    {
+      month: "short",
+      day: "numeric",
+    },
+  );
+
+  let iconColor = "";
+  let titleColor = "";
+  let driftText = "";
+  let IconSVG = null;
+
+  if (actualTimestamp > originalTimestamp) {
+    // Late
+    iconColor = "text-rose-400 group-hover:text-rose-300";
+    titleColor = "text-rose-400";
+    driftText = "Delivered Late";
+    IconSVG = (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        className="w-4 h-4"
+      >
+        <path
+          fillRule="evenodd"
+          d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v4.59L7.3 9.24a.75.75 0 0 0-1.1 1.02l3.25 3.5a.75.75 0 0 0 1.1 0l3.25-3.5a.75.75 0 1 0-1.1-1.02l-1.95 2.1V6.75Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    );
+  } else {
+    // Early
+    iconColor = "text-emerald-400 group-hover:text-emerald-300";
+    titleColor = "text-emerald-400";
+    driftText = "Delivered Early";
+    IconSVG = (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        className="w-4 h-4"
+      >
+        <path
+          fillRule="evenodd"
+          d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-.75-4.75a.75.75 0 0 0 1.5 0V8.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0L6.2 9.74a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <div className="relative flex items-center gap-1.5 group cursor-default">
+      <span className="text-white font-medium">{formattedActualDate}</span>
+      {/* Removed animate-pulse so it looks final/settled */}
+      <span className={`${iconColor} transition-colors`}>{IconSVG}</span>
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col w-56 p-3 bg-slate-950 text-xs text-slate-200 rounded-lg shadow-xl border border-slate-700/80 z-50 pointer-events-none">
+        <p className={`font-bold ${titleColor} mb-1 flex items-center gap-1`}>
+          {driftText}
+        </p>
+        <p className="text-slate-300 leading-relaxed">
+          Originally expected on{" "}
+          <strong className="text-white">{formattedOriginalDate}</strong>.
+        </p>
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-b-[6px] border-transparent border-b-slate-950"></div>
       </div>
     </div>
@@ -309,8 +412,7 @@ export default function App() {
             Where Is <span className="text-cyan-400">My Order?</span>
           </h1>
           <p className="mt-3 text-lg text-slate-400">
-            Real-time inbound and outbound shipments to the Kramer-McGee
-            household
+            Real-time inbound and outbound shipments
           </p>
         </header>
 
@@ -616,16 +718,9 @@ export default function App() {
                               />
                             </td>
 
-                            {/* Delivered On */}
+                            {/* FIX 2: Delivered On (With Drift Component) */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                              {shipment.actualDeliveryDate
-                                ? new Date(
-                                    shipment.actualDeliveryDate,
-                                  ).toLocaleDateString(undefined, {
-                                    month: "short",
-                                    day: "numeric",
-                                  })
-                                : "—"}
+                              <DeliveredOnWithDrift shipment={shipment} />
                             </td>
 
                             {/* Last Activity */}
