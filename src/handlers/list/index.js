@@ -10,14 +10,38 @@ const docClient = DynamoDBDocumentClient.from(client);
 const TABLE_NAME = process.env.SHIPMENTS_TABLE;
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
 
+// NEW helper to recursively scan a table and handle the 1MB Scan Limit
+async function scanAll(docClient, params) {
+  let accumulatedItems = [];
+  let lastEvaluatedKey = null;
+
+  do {
+    const scanParams = { ...params };
+    if (lastEvaluatedKey) {
+      scanParams.ExclusiveStartKey = lastEvaluatedKey;
+    }
+
+    const command = new ScanCommand(scanParams);
+    const response = await docClient.send(command);
+
+    if (response.Items) {
+      accumulatedItems = accumulatedItems.concat(response.Items);
+    }
+
+    // If this exists, there is more data left in the table!
+    lastEvaluatedKey = response.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return accumulatedItems;
+}
+
 exports.handler = async (event) => {
   console.log("EVENT: \n" + JSON.stringify(event, null, 2));
 
   try {
-    // 1. Scan Shipments
+    // 1. Scan Shipments with Pagination Support
     const params = {
       TableName: TABLE_NAME,
-      // BUG FIX: Added estimatedDeliveryHistory to the ProjectionExpression
       ProjectionExpression:
         "carrier, trackingNumber, #src, direction, statusCode, statusDescription, estimatedDeliveryDate, estimatedDeliveryHistory, actualDeliveryDate, shipDate, lastEventTimestamp, serviceLevel",
       ExpressionAttributeNames: {
@@ -25,15 +49,12 @@ exports.handler = async (event) => {
       },
     };
 
-    const command = new ScanCommand(params);
-    const { Items: shipmentItems } = await docClient.send(command);
+    const shipmentItems = await scanAll(docClient, params);
 
-    // 2. Scan Events
+    // 2. Scan Events with Pagination Support
     let eventItems = [];
     if (EVENTS_TABLE) {
-      const eventsCommand = new ScanCommand({ TableName: EVENTS_TABLE });
-      const eventsResponse = await docClient.send(eventsCommand);
-      eventItems = eventsResponse.Items || [];
+      eventItems = await scanAll(docClient, { TableName: EVENTS_TABLE });
     } else {
       console.warn(
         "EVENTS_TABLE environment variable is missing. Events will not be loaded.",
