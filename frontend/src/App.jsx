@@ -17,6 +17,33 @@ const getStatusStyle = (code) => {
   }
 };
 
+// --- NEW HELPER: Label Generated Date ---
+const getLabelGeneratedDate = (shipment) => {
+  const events = shipment.events || [];
+
+  // Search chronological events for label creation keywords
+  const labelEvent = events.find((event) => {
+    const desc = (event.description || "").toLowerCase();
+    return (
+      desc.includes("label created") ||
+      desc.includes("shipping label created") ||
+      desc.includes("shipper created a label") ||
+      desc.includes("label has been created") ||
+      desc.includes("billing information received") // Common FedEx equivalent
+    );
+  });
+
+  if (!labelEvent || !labelEvent.carrierOccurredAt) {
+    return null;
+  }
+
+  // Format it cleanly (e.g., "Jun 15")
+  return new Date(labelEvent.carrierOccurredAt).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+};
+
 // --- COMPONENT: Estimated Delivery Date Drift Tracker ---
 const EstimatedDeliveryWithHistory = ({ shipment }) => {
   if (!shipment.estimatedDeliveryDate) {
@@ -50,7 +77,10 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
   const originalDate = filteredHistory[0].date;
   const formattedOriginalDate = new Date(originalDate).toLocaleDateString(
     undefined,
-    { month: "short", day: "numeric" },
+    {
+      month: "short",
+      day: "numeric",
+    },
   );
 
   const currentTimestamp = new Date(shipment.estimatedDeliveryDate).setHours(
@@ -118,7 +148,6 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
   }
 
   return (
-    // FIX 1: Changed cursor-help to cursor-default
     <div className="relative flex items-center gap-1.5 group cursor-default">
       <span className="text-white font-medium">{formattedCurrentDate}</span>
       <span className={`${iconColor} animate-pulse transition-colors`}>
@@ -143,7 +172,7 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
   );
 };
 
-// --- COMPONENT: Actual Delivery Drift Tracker (Fixed for Null EDDs) ---
+// --- COMPONENT: Actual Delivery Drift Tracker ---
 const DeliveredOnWithDrift = ({ shipment }) => {
   if (!shipment.actualDeliveryDate) {
     return <span className="text-slate-500">—</span>;
@@ -158,16 +187,13 @@ const DeliveredOnWithDrift = ({ shipment }) => {
 
   const history = shipment.estimatedDeliveryHistory || [];
 
-  // If there is no final estimate AND no history, we can't calculate any drift
   if (!shipment.estimatedDeliveryDate && history.length === 0) {
     return <span className="text-slate-300">{formattedActualDate}</span>;
   }
 
-  // Find the original expected date
   let originalEdd = null;
 
   if (shipment.estimatedDeliveryDate) {
-    // If a final estimate exists, filter history to find the first genuine date-change
     const currentEddDate = shipment.estimatedDeliveryDate.split("T")[0];
     const filteredHistory = history.filter((historyItem) => {
       const historyDate = historyItem.date
@@ -180,11 +206,9 @@ const DeliveredOnWithDrift = ({ shipment }) => {
         ? filteredHistory[0].date
         : shipment.estimatedDeliveryDate;
   } else {
-    // If the carrier cleared the final estimate, use the oldest recorded date in your history!
     originalEdd = history[0].date;
   }
 
-  // Safety fallback if we still don't have an original date
   if (!originalEdd) {
     return <span className="text-slate-300">{formattedActualDate}</span>;
   }
@@ -197,7 +221,6 @@ const DeliveredOnWithDrift = ({ shipment }) => {
   );
   const originalTimestamp = new Date(originalEdd).setHours(0, 0, 0, 0);
 
-  // If delivered on exactly the original scheduled date, show no tooltip
   if (actualTimestamp === originalTimestamp) {
     return <span className="text-slate-300">{formattedActualDate}</span>;
   }
@@ -216,7 +239,6 @@ const DeliveredOnWithDrift = ({ shipment }) => {
   let IconSVG = null;
 
   if (actualTimestamp > originalTimestamp) {
-    // Late (Delivered after the original expectation)
     iconColor = "text-rose-400 group-hover:text-rose-300";
     titleColor = "text-rose-400";
     driftText = "Delivered Late";
@@ -235,7 +257,6 @@ const DeliveredOnWithDrift = ({ shipment }) => {
       </svg>
     );
   } else {
-    // Early (Delivered before or on the original expectation)
     iconColor = "text-emerald-400 group-hover:text-emerald-300";
     titleColor = "text-emerald-400";
     driftText = "Delivered Early";
@@ -582,6 +603,12 @@ export default function App() {
                         scope="col"
                         className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                       >
+                        Label Gen.
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                      >
                         Shipped On
                       </th>
                       <th
@@ -711,6 +738,11 @@ export default function App() {
                               </span>
                             </td>
 
+                            {/* Label Gen. */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                              {getLabelGeneratedDate(shipment) || "—"}
+                            </td>
+
                             {/* Shipped On */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               {shipment.shipDate
@@ -730,7 +762,7 @@ export default function App() {
                               />
                             </td>
 
-                            {/* FIX 2: Delivered On (With Drift Component) */}
+                            {/* Delivered On (With Drift Component) */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               <DeliveredOnWithDrift shipment={shipment} />
                             </td>
@@ -746,7 +778,7 @@ export default function App() {
                           {/* Expanded History Row */}
                           {isExpanded && (
                             <tr className="bg-slate-900/60 border-t border-b border-slate-800/80">
-                              <td colSpan={8} className="px-8 py-5">
+                              <td colSpan={9} className="px-8 py-5">
                                 <div className="border border-slate-700/60 rounded-xl overflow-hidden bg-slate-900 shadow-inner">
                                   <div className="bg-slate-800/40 px-5 py-3 border-b border-slate-700/60 flex justify-between items-center">
                                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
