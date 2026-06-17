@@ -133,7 +133,12 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
       <span className={`${iconColor} animate-pulse transition-colors`}>
         {IconSVG}
       </span>
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex flex-col w-56 p-3 bg-slate-950 text-xs text-slate-200 rounded-lg shadow-xl border border-slate-700/80 z-50 pointer-events-none">
+      {/* 
+        FIX: Removed 'bottom-full' and 'mb-2' 
+        Added dynamic placement: 'group-hover:block' and 'top-6' so it drops DOWN instead of up, 
+        preventing 'overflow-hidden' from clipping it at the top of the table.
+      */}
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col w-56 p-3 bg-slate-950 text-xs text-slate-200 rounded-lg shadow-xl border border-slate-700/80 z-50 pointer-events-none">
         <p className={`font-bold ${titleColor} mb-1 flex items-center gap-1`}>
           {driftText}
         </p>
@@ -146,7 +151,8 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
           Rescheduled {filteredHistory.length} time
           {filteredHistory.length > 1 ? "s" : ""} by carrier.
         </p>
-        <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px\undefined] border-r-[6px] border-t-[6px] border-transparent border-t-slate-950"></div>
+        {/* Adjusted little arrow to point UPWARDS instead of down */}
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-b-[6px] border-transparent border-b-slate-950"></div>
       </div>
     </div>
   );
