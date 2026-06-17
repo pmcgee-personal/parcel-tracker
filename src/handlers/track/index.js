@@ -191,6 +191,7 @@ exports.handler = async (event) => {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST,OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
+        "X-Robots-Tag": "noindex, nofollow",
       },
       body: JSON.stringify({ message: "Successfully registered package" }),
     };
@@ -203,6 +204,7 @@ exports.handler = async (event) => {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST,OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
+        "X-Robots-Tag": "noindex, nofollow",
       },
       body: JSON.stringify({
         message: "Internal Server Error",

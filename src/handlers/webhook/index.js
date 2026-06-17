@@ -279,7 +279,10 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Robots-Tag": "noindex, nofollow",
+      },
       body: JSON.stringify({
         message: "Webhook processed successfully",
         shipment: trackingNumber,
@@ -291,6 +294,10 @@ exports.handler = async (event) => {
     console.error("Error handling webhook:", error);
     return {
       statusCode: 500,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Robots-Tag": "noindex, nofollow",
+      },
       body: JSON.stringify({
         message: "Internal Server Error",
         error: error.message,

@@ -84,6 +84,7 @@ exports.handler = async (event) => {
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
+        "X-Robots-Tag": "noindex, nofollow",
       },
       body: JSON.stringify(shipmentsWithEvents),
     };
@@ -94,6 +95,7 @@ exports.handler = async (event) => {
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
+        "X-Robots-Tag": "noindex, nofollow",
       },
       body: JSON.stringify({ message: "Internal Server Error" }),
     };
