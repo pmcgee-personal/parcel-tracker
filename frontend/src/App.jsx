@@ -143,7 +143,7 @@ const EstimatedDeliveryWithHistory = ({ shipment }) => {
   );
 };
 
-// --- NEW COMPONENT: Actual Delivery Drift Tracker ---
+// --- COMPONENT: Actual Delivery Drift Tracker (Fixed for Null EDDs) ---
 const DeliveredOnWithDrift = ({ shipment }) => {
   if (!shipment.actualDeliveryDate) {
     return <span className="text-slate-500">—</span>;
@@ -156,25 +156,38 @@ const DeliveredOnWithDrift = ({ shipment }) => {
     day: "numeric",
   });
 
-  if (!shipment.estimatedDeliveryDate) {
+  const history = shipment.estimatedDeliveryHistory || [];
+
+  // If there is no final estimate AND no history, we can't calculate any drift
+  if (!shipment.estimatedDeliveryDate && history.length === 0) {
     return <span className="text-slate-300">{formattedActualDate}</span>;
   }
 
   // Find the original expected date
-  const currentEddDate = shipment.estimatedDeliveryDate.split("T")[0];
-  const filteredHistory = (shipment.estimatedDeliveryHistory || []).filter(
-    (historyItem) => {
+  let originalEdd = null;
+
+  if (shipment.estimatedDeliveryDate) {
+    // If a final estimate exists, filter history to find the first genuine date-change
+    const currentEddDate = shipment.estimatedDeliveryDate.split("T")[0];
+    const filteredHistory = history.filter((historyItem) => {
       const historyDate = historyItem.date
         ? historyItem.date.split("T")[0]
         : null;
       return historyDate && historyDate !== currentEddDate;
-    },
-  );
+    });
+    originalEdd =
+      filteredHistory.length > 0
+        ? filteredHistory[0].date
+        : shipment.estimatedDeliveryDate;
+  } else {
+    // If the carrier cleared the final estimate, use the oldest recorded date in your history!
+    originalEdd = history[0].date;
+  }
 
-  const originalEdd =
-    filteredHistory.length > 0
-      ? filteredHistory[0].date
-      : shipment.estimatedDeliveryDate;
+  // Safety fallback if we still don't have an original date
+  if (!originalEdd) {
+    return <span className="text-slate-300">{formattedActualDate}</span>;
+  }
 
   const actualTimestamp = new Date(shipment.actualDeliveryDate).setHours(
     0,
@@ -203,7 +216,7 @@ const DeliveredOnWithDrift = ({ shipment }) => {
   let IconSVG = null;
 
   if (actualTimestamp > originalTimestamp) {
-    // Late
+    // Late (Delivered after the original expectation)
     iconColor = "text-rose-400 group-hover:text-rose-300";
     titleColor = "text-rose-400";
     driftText = "Delivered Late";
@@ -222,7 +235,7 @@ const DeliveredOnWithDrift = ({ shipment }) => {
       </svg>
     );
   } else {
-    // Early
+    // Early (Delivered before or on the original expectation)
     iconColor = "text-emerald-400 group-hover:text-emerald-300";
     titleColor = "text-emerald-400";
     driftText = "Delivered Early";
@@ -245,7 +258,6 @@ const DeliveredOnWithDrift = ({ shipment }) => {
   return (
     <div className="relative flex items-center gap-1.5 group cursor-default">
       <span className="text-white font-medium">{formattedActualDate}</span>
-      {/* Removed animate-pulse so it looks final/settled */}
       <span className={`${iconColor} transition-colors`}>{IconSVG}</span>
       <div className="absolute top-6 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col w-56 p-3 bg-slate-950 text-xs text-slate-200 rounded-lg shadow-xl border border-slate-700/80 z-50 pointer-events-none">
         <p className={`font-bold ${titleColor} mb-1 flex items-center gap-1`}>
