@@ -11,7 +11,6 @@ const {
 
 const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(ddbClient);
-
 const secretsClient = new SecretsManagerClient({
   region: process.env.AWS_REGION,
 });
@@ -32,7 +31,7 @@ const getApiKey = async () => {
   return shipStationApiKey;
 };
 
-// --- NEW: Helper to extract just the YYYY-MM-DD calendar date ---
+// --- Helper to extract just the YYYY-MM-DD calendar date ---
 const getDateOnly = (dateString) => {
   if (!dateString) return null;
   return dateString.includes("T")
@@ -62,24 +61,44 @@ exports.handler = async (event) => {
     const apiKey = await getApiKey();
 
     console.log(
-      `Fetching initial tracking data for ${trackingNumber} from ShipEngine API...`,
+      `Fetching tracking data and starting webhook for ${trackingNumber}...`,
     );
-    const apiUrl = `https://api.shipengine.com/v1/tracking?carrier_code=${carrier}&tracking_number=${trackingNumber}`;
 
-    const response = await fetch(apiUrl, {
-      method: "GET",
-      headers: { "API-Key": apiKey, "Content-Type": "application/json" },
-    });
+    const trackingUrl = `https://api.shipengine.com/v1/tracking?carrier_code=${carrier}&tracking_number=${trackingNumber}`;
+    const startTrackingUrl = `https://api.shipengine.com/v1/tracking/start?carrier_code=${carrier}&tracking_number=${trackingNumber}`;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("ShipEngine API error:", errorText);
+    // Execute both requests simultaneously
+    const [trackingResponse, startTrackingResponse] = await Promise.all([
+      fetch(trackingUrl, {
+        method: "GET",
+        headers: { "API-Key": apiKey, "Content-Type": "application/json" },
+      }),
+      fetch(startTrackingUrl, {
+        method: "POST", // The start endpoint requires a POST request
+        headers: { "API-Key": apiKey, "Content-Type": "application/json" },
+      }),
+    ]);
+
+    // Check if the get tracking data request failed
+    if (!trackingResponse.ok) {
+      const errorText = await trackingResponse.text();
+      console.error("ShipEngine API GET Tracking error:", errorText);
       throw new Error(
-        `ShipEngine API failed with status ${response.status}: ${errorText}`,
+        `ShipEngine API (Get Tracking) failed with status ${trackingResponse.status}: ${errorText}`,
       );
     }
 
-    const trackingData = await response.json();
+    // Check if the webhook registration request failed
+    if (!startTrackingResponse.ok) {
+      const errorText = await startTrackingResponse.text();
+      console.error("ShipEngine API POST Start Tracking error:", errorText);
+      throw new Error(
+        `ShipEngine API (Start Webhook) failed with status ${startTrackingResponse.status}: ${errorText}`,
+      );
+    }
+
+    // Only parse the tracking data if both requests succeeded
+    const trackingData = await trackingResponse.json();
 
     // 1. Fetch the existing shipment to check for previous estimated delivery date
     let existingHistory = [];
@@ -91,21 +110,16 @@ exports.handler = async (event) => {
         Key: { trackingNumber: trackingData.tracking_number },
       });
       const getResult = await docClient.send(getCommand);
-
       if (getResult.Item) {
         existingHistory = getResult.Item.estimatedDeliveryHistory || [];
         oldEstimatedDeliveryDate = getResult.Item.estimatedDeliveryDate || null;
       }
     } catch (dbErr) {
-      console.warn(
-        "Could not retrieve existing shipment (might be a new package):",
-        dbErr.message,
-      );
+      console.warn("Could not retrieve existing shipment:", dbErr.message);
     }
 
     const newEstimatedDeliveryDate =
       trackingData.estimated_delivery_date || null;
-
     const oldDateString = getDateOnly(oldEstimatedDeliveryDate);
     const newDateString = getDateOnly(newEstimatedDeliveryDate);
 
@@ -115,7 +129,7 @@ exports.handler = async (event) => {
         `Detected estimated delivery date change from ${oldDateString} to ${newDateString}. Logging to history.`,
       );
       existingHistory.push({
-        date: oldEstimatedDeliveryDate, // Keep the full original timestamp
+        date: oldEstimatedDeliveryDate,
         recordedAt: new Date().toISOString(),
       });
     }
@@ -137,7 +151,7 @@ exports.handler = async (event) => {
       carrierStatusDescription: trackingData.carrier_status_description || null,
       shipDate: trackingData.ship_date || null,
       estimatedDeliveryDate: newEstimatedDeliveryDate,
-      estimatedDeliveryHistory: existingHistory, // 3. Save the updated history list
+      estimatedDeliveryHistory: existingHistory,
       actualDeliveryDate: trackingData.actual_delivery_date || null,
       exceptionDescription: trackingData.exception_description || null,
     };
@@ -146,7 +160,6 @@ exports.handler = async (event) => {
       TableName: SHIPMENTS_TABLE,
       Item: shipmentItem,
     });
-
     await docClient.send(shipmentPutCommand);
     console.log(
       "Shipment record written with history size:",
@@ -198,7 +211,7 @@ exports.handler = async (event) => {
   } catch (error) {
     console.error("Error in TrackLambda:", error);
     return {
-      statusCode: 500,
+      statusCode: 500, // Returning 500 here ensures your frontend sees the error
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
@@ -208,7 +221,7 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         message: "Internal Server Error",
-        error: error.message,
+        error: error.message, // Passes the specific fetch error to the UI
       }),
     };
   }
