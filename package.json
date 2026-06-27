@@ -1,0 +1,9 @@
+{
+  "name": "parcel-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend unit tests for the parcel-tracker Lambda handlers",
+  "scripts": {
+    "test": "node --test"
+  }
+}
