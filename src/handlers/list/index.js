@@ -1,14 +1,9 @@
-const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { ScanCommand } = require("@aws-sdk/lib-dynamodb");
 const {
-  DynamoDBDocumentClient,
-  ScanCommand,
-} = require("@aws-sdk/lib-dynamodb");
-
-const client = new DynamoDBClient({});
-const docClient = DynamoDBDocumentClient.from(client);
-
-const TABLE_NAME = process.env.SHIPMENTS_TABLE;
-const EVENTS_TABLE = process.env.EVENTS_TABLE;
+  docClient,
+  SHIPMENTS_TABLE: TABLE_NAME,
+  EVENTS_TABLE,
+} = require("../../lib/ddb");
 
 // NEW helper to recursively scan a table and handle the 1MB Scan Limit
 async function scanAll(docClient, params) {

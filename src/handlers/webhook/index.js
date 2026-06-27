@@ -1,6 +1,4 @@
-const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
-  DynamoDBDocumentClient,
   PutCommand,
   UpdateCommand,
   GetCommand,
@@ -8,14 +6,9 @@ const {
 const {
   verifyShipEngineSignature,
 } = require("../../lib/verifyShipEngineSignature");
-
-const ddbClient = new DynamoDBClient({
-  region: process.env.AWS_REGION || "us-west-2",
-});
-
-const docClient = DynamoDBDocumentClient.from(ddbClient);
-const SHIPMENTS_TABLE = process.env.SHIPMENTS_TABLE || "Shipments";
-const EVENTS_TABLE = process.env.EVENTS_TABLE || "Events";
+const { docClient, SHIPMENTS_TABLE, EVENTS_TABLE } = require("../../lib/ddb");
+const { mapTrackingEvent } = require("../../lib/events");
+const { getDateOnly } = require("../../lib/dates");
 
 // NEW: Helper function to evaluate and send push notifications
 async function sendPushNotification(
@@ -206,13 +199,6 @@ exports.handler = async (event) => {
 
     const incomingEdd = data.estimated_delivery_date || null;
 
-    const getDateOnly = (dateString) => {
-      if (!dateString) return null;
-      return dateString.includes("T")
-        ? dateString.split("T")[0]
-        : dateString.substring(0, 10);
-    };
-
     const existingDateString = getDateOnly(existingEdd);
     const incomingDateString = getDateOnly(incomingEdd);
 
@@ -310,28 +296,7 @@ exports.handler = async (event) => {
 
       const eventParams = {
         TableName: EVENTS_TABLE,
-        Item: {
-          trackingNumber: trackingNumber,
-          occurredAt: occurredAt,
-          carrierOccurredAt: trackingEvent.carrier_occurred_at || null,
-          description: trackingEvent.description || null,
-          cityLocality: trackingEvent.city_locality || null,
-          stateProvince: trackingEvent.state_province || null,
-          postalCode: trackingEvent.postal_code || null,
-          countryCode: trackingEvent.country_code || null,
-          companyName: trackingEvent.company_name || null,
-          signer: trackingEvent.signer || null,
-          eventCode: trackingEvent.event_code || null,
-          carrierDetailCode: trackingEvent.carrier_detail_code || null,
-          statusCode: trackingEvent.status_code || null,
-          statusDescription: trackingEvent.status_description || null,
-          carrierStatusCode: trackingEvent.carrier_status_code || null,
-          carrierStatusDescription:
-            trackingEvent.carrier_status_description || null,
-          latitude: trackingEvent.latitude || null,
-          longitude: trackingEvent.longitude || null,
-          createdAt: new Date().toISOString(),
-        },
+        Item: mapTrackingEvent(trackingNumber, trackingEvent),
         ConditionExpression: "attribute_not_exists(occurredAt)",
       };
 

@@ -1,22 +1,16 @@
-const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const {
-  DynamoDBDocumentClient,
-  PutCommand,
-  GetCommand,
-} = require("@aws-sdk/lib-dynamodb");
+const { PutCommand, GetCommand } = require("@aws-sdk/lib-dynamodb");
 const {
   SecretsManagerClient,
   GetSecretValueCommand,
 } = require("@aws-sdk/client-secrets-manager");
+const { docClient, SHIPMENTS_TABLE, EVENTS_TABLE } = require("../../lib/ddb");
+const { mapTrackingEvent } = require("../../lib/events");
+const { getDateOnly } = require("../../lib/dates");
 
-const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-const docClient = DynamoDBDocumentClient.from(ddbClient);
 const secretsClient = new SecretsManagerClient({
   region: process.env.AWS_REGION,
 });
 
-const SHIPMENTS_TABLE = process.env.SHIPMENTS_TABLE;
-const EVENTS_TABLE = process.env.EVENTS_TABLE;
 const SECRET_NAME = process.env.SECRET_NAME;
 
 let shipStationApiKey = null;
@@ -34,14 +28,6 @@ const getApiKey = async () => {
   }
   shipStationApiKey = secret.ShipStationApiKey;
   return shipStationApiKey;
-};
-
-// --- Helper to extract just the YYYY-MM-DD calendar date ---
-const getDateOnly = (dateString) => {
-  if (!dateString) return null;
-  return dateString.includes("T")
-    ? dateString.split("T")[0]
-    : dateString.substring(0, 10);
 };
 
 exports.handler = async (event) => {
@@ -175,27 +161,7 @@ exports.handler = async (event) => {
       for (const trackingEvent of trackingData.events) {
         const eventPutCommand = new PutCommand({
           TableName: EVENTS_TABLE,
-          Item: {
-            trackingNumber: trackingData.tracking_number,
-            occurredAt: trackingEvent.occurred_at,
-            carrierOccurredAt: trackingEvent.carrier_occurred_at || null,
-            description: trackingEvent.description || null,
-            cityLocality: trackingEvent.city_locality || null,
-            stateProvince: trackingEvent.state_province || null,
-            postalCode: trackingEvent.postal_code || null,
-            countryCode: trackingEvent.country_code || null,
-            companyName: trackingEvent.company_name || null,
-            signer: trackingEvent.signer || null,
-            eventCode: trackingEvent.event_code || null,
-            carrierDetailCode: trackingEvent.carrier_detail_code || null,
-            statusCode: trackingEvent.status_code || null,
-            statusDescription: trackingEvent.status_description || null,
-            carrierStatusCode: trackingEvent.carrier_status_code || null,
-            carrierStatusDescription:
-              trackingEvent.carrier_status_description || null,
-            latitude: trackingEvent.latitude || null,
-            longitude: trackingEvent.longitude || null,
-          },
+          Item: mapTrackingEvent(trackingData.tracking_number, trackingEvent),
         });
         await docClient.send(eventPutCommand);
       }
