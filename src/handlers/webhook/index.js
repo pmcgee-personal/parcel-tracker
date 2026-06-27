@@ -5,6 +5,9 @@ const {
   UpdateCommand,
   GetCommand,
 } = require("@aws-sdk/lib-dynamodb");
+const {
+  verifyShipEngineSignature,
+} = require("../../lib/verifyShipEngineSignature");
 
 const ddbClient = new DynamoDBClient({
   region: process.env.AWS_REGION || "us-west-2",
@@ -119,6 +122,30 @@ exports.handler = async (event) => {
   console.log("Received webhook event:", JSON.stringify(event, null, 2));
 
   try {
+    // Verify the request genuinely came from ShipEngine before trusting any of
+    // its contents. Bypass only for local testing (events/event.json has no
+    // signature headers); never set WEBHOOK_VERIFY_DISABLED in a deployment.
+    if (process.env.WEBHOOK_VERIFY_DISABLED === "true") {
+      console.warn(
+        "WEBHOOK_VERIFY_DISABLED is set — skipping ShipEngine signature verification.",
+      );
+    } else {
+      const verification = await verifyShipEngineSignature(event);
+      if (!verification.ok) {
+        console.warn(
+          `Rejected webhook (${verification.status}): ${verification.reason}`,
+        );
+        return {
+          statusCode: verification.status,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Robots-Tag": "noindex, nofollow",
+          },
+          body: JSON.stringify({ message: "Unauthorized" }),
+        };
+      }
+    }
+
     if (!event.body)
       return {
         statusCode: 400,

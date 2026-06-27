@@ -137,11 +137,27 @@ Stack outputs include `FrontendBucketName`, `CloudFrontDistributionId`, and `Clo
 
 All endpoints are available under the API Gateway `Prod` stage. URLs are printed in stack outputs after deployment.
 
-| Method | Path       | Function        | Description                      |
-| ------ | ---------- | --------------- | -------------------------------- |
-| POST   | `/webhook` | WebhookFunction | Ingests a carrier tracking event |
-| POST   | `/track`   | TrackFunction   | Registers a new tracking number  |
-| GET    | `/track`   | ListFunction    | Returns all tracked shipments    |
+| Method | Path       | Function        | Description                      | Auth                       |
+| ------ | ---------- | --------------- | -------------------------------- | -------------------------- |
+| POST   | `/webhook` | WebhookFunction | Ingests a carrier tracking event | ShipEngine RSA signature   |
+| POST   | `/track`   | TrackFunction   | Registers a new tracking number  | API key (`x-api-key`)      |
+| GET    | `/track`   | ListFunction    | Returns all tracked shipments    | API key (`x-api-key`)      |
+
+### Authentication
+
+- **`/webhook`** verifies the `x-shipengine-rsa-sha256-*` signature headers against ShipEngine's published JWKS (`https://api.shipengine.com/jwks`). Requests with missing/invalid signatures or stale timestamps (>5 min) are rejected. For local testing with unsigned payloads, set `WEBHOOK_VERIFY_DISABLED=true` (local only — never in a deployment).
+- **`/track`** (GET + POST) requires an API key, enforced via an API Gateway usage plan that also throttles and quota-limits requests to protect the paid ShipEngine quota. The key is generated on deploy and exposed (by ID) via the `ApiKeyId` stack output.
+
+  - **CI deploys** (`.github/workflows/deploy.yml`): handled automatically — the workflow reads `ApiKeyId` from the stack, resolves the value, and builds the frontend with `VITE_API_KEY`. Just push to `main`.
+  - **Local dev** (`npm run dev`): fetch the value once and put it in `frontend/.env.local` as `VITE_API_KEY=...`:
+
+    ```bash
+    aws apigateway get-api-key \
+      --api-key <ApiKeyId-from-stack-output> \
+      --include-value --query value --output text
+    ```
+
+  Note: because the SPA is public, this key is visible to anyone using the dashboard — it is an abuse/throttle control, not a true secret.
 
 ---
 
@@ -182,7 +198,7 @@ The TrackFunction reads the ShipStation API key from AWS Secrets Manager. Before
 ```bash
 aws secretsmanager create-secret \
   --name "ParcelTracker/ShipStationApiKey" \
-  --secret-string '{"apiKey":"your-key-here"}'
+  --secret-string '{"ShipStationApiKey":"your-key-here"}'
 ```
 
 The Lambda is granted `AWSSecretsManagerGetSecretValuePolicy` scoped to this exact secret ARN.

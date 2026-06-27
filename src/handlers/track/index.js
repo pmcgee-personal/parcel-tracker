@@ -27,6 +27,11 @@ const getApiKey = async () => {
   const command = new GetSecretValueCommand({ SecretId: SECRET_NAME });
   const response = await secretsClient.send(command);
   const secret = JSON.parse(response.SecretString);
+  if (!secret.ShipStationApiKey) {
+    throw new Error(
+      `Secret '${SECRET_NAME}' is missing the 'ShipStationApiKey' field`,
+    );
+  }
   shipStationApiKey = secret.ShipStationApiKey;
   return shipStationApiKey;
 };

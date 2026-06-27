@@ -315,6 +315,7 @@ export default function App() {
   const API_URL = import.meta.env.VITE_API_BASE_URL;
   const TRACK_API_URL =
     "https://zdecoujal6.execute-api.us-west-2.amazonaws.com/Prod/track";
+  const API_KEY = import.meta.env.VITE_API_KEY;
 
   const toggleRow = (trackingNumber) => {
     const newExpanded = new Set(expandedShipments);
@@ -329,7 +330,9 @@ export default function App() {
   const fetchShipments = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(API_URL);
+      const response = await fetch(API_URL, {
+        headers: { "x-api-key": API_KEY },
+      });
       if (!response.ok) {
         throw new Error(`API error: ${response.statusText}`);
       }
@@ -373,7 +376,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [API_URL]);
+  }, [API_URL, API_KEY]);
 
   useEffect(() => {
     fetchShipments();
@@ -389,7 +392,7 @@ export default function App() {
     try {
       const response = await fetch(TRACK_API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
         body: JSON.stringify({
           trackingNumber: newTracking,
           carrier: newCarrier.toLowerCase(),

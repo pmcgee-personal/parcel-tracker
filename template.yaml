@@ -22,6 +22,20 @@ Globals:
       AllowMethods: "'GET,POST,OPTIONS'"
       AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
       AllowOrigin: "'*'"
+    # Create an API key + usage plan for this API. The key is required only on
+    # the browser-facing /track methods (see their per-event Auth). The webhook
+    # stays key-free because it is authenticated by RSA signature instead.
+    # The throttle/quota cap abuse of the (paid) ShipEngine-backed POST /track.
+    Auth:
+      UsagePlan:
+        CreateUsagePlan: PER_API
+        Description: "Throttle and quota limit for the parcel-tracker API"
+        Throttle:
+          BurstLimit: 10
+          RateLimit: 5 # requests per second, steady-state
+        Quota:
+          Limit: 1000
+          Period: DAY
 
 Resources:
   # DynamoDB table to store high-level shipment details.
@@ -115,6 +129,8 @@ Resources:
           Properties:
             Path: /track
             Method: post
+            Auth:
+              ApiKeyRequired: true
 
   # Lambda function to retrieve all tracked shipments for the frontend
   ListFunction:
@@ -139,6 +155,8 @@ Resources:
           Properties:
             Path: /track
             Method: get
+            Auth:
+              ApiKeyRequired: true
 
   # --- FRONTEND HOSTING RESOURCES ---
   FrontendBucket:
@@ -218,6 +236,13 @@ Outputs:
   ListApiUrl:
     Description: "API Gateway endpoint URL for the List API endpoint (GET)"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/track"
+
+  ApiKeyId:
+    Description: >
+      ID of the API key required by the /track endpoints. Retrieve the secret
+      value with:
+      aws apigateway get-api-key --api-key <this-id> --include-value --query value --output text
+    Value: !Ref ServerlessRestApiApiKey
 
   # --- FRONTEND OUTPUTS ---
   FrontendBucketName:
