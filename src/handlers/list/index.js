@@ -56,16 +56,19 @@ exports.handler = async (event) => {
       );
     }
 
-    // 3. Map events to their respective shipments
-    const shipmentsWithEvents = shipmentItems.map((shipment) => {
-      const shipmentEvents = eventItems.filter(
-        (e) => e.trackingNumber === shipment.trackingNumber,
-      );
-      return {
-        ...shipment,
-        events: shipmentEvents,
-      };
-    });
+    // 3. Group events by tracking number once, then attach.
+    // O(n + m) instead of filtering all events for every shipment (O(n * m)).
+    const eventsByTracking = new Map();
+    for (const e of eventItems) {
+      const list = eventsByTracking.get(e.trackingNumber);
+      if (list) list.push(e);
+      else eventsByTracking.set(e.trackingNumber, [e]);
+    }
+
+    const shipmentsWithEvents = shipmentItems.map((shipment) => ({
+      ...shipment,
+      events: eventsByTracking.get(shipment.trackingNumber) || [],
+    }));
 
     // 4. Fallback sorting (primary sorting is on frontend)
     shipmentsWithEvents.sort((a, b) => {

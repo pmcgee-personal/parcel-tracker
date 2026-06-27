@@ -49,9 +49,8 @@ Resources:
       PrimaryKey:
         Name: trackingNumber
         Type: String
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+      # Omitting ProvisionedThroughput makes the SimpleTable on-demand
+      # (PAY_PER_REQUEST) — self-scaling and avoids scan throttling.
       SSESpecification:
         SSEEnabled: true
 
@@ -73,9 +72,8 @@ Resources:
           KeyType: HASH
         - AttributeName: occurredAt
           KeyType: RANGE
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+      # On-demand billing — self-scaling, avoids scan throttling as Events grows.
+      BillingMode: PAY_PER_REQUEST
       SSESpecification:
         SSEEnabled: true
 
@@ -90,6 +88,7 @@ Resources:
           SHIPMENTS_TABLE: !Ref ShipmentsTable
           EVENTS_TABLE: !Ref EventsTable
           NTFY_URL: !Ref NtfyUrl # <--- INJECTING PARAMETER HERE SECURELY
+          APP_TIMEZONE: America/Los_Angeles # Calendar-day basis for notification dedup
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ShipmentsTable

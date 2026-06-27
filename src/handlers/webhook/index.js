@@ -8,7 +8,7 @@ const {
 } = require("../../lib/verifyShipEngineSignature");
 const { docClient, SHIPMENTS_TABLE, EVENTS_TABLE } = require("../../lib/ddb");
 const { mapTrackingEvent } = require("../../lib/events");
-const { getDateOnly } = require("../../lib/dates");
+const { getDateOnly, getLocalDateString } = require("../../lib/dates");
 
 // NEW: Helper function to evaluate and send push notifications
 async function sendPushNotification(
@@ -193,9 +193,12 @@ exports.handler = async (event) => {
     }
 
     // Find the most recent event from the incoming webhook payload.
-    const latestEvent = data.events?.sort(
-      (a, b) => new Date(b.occurred_at) - new Date(a.occurred_at),
-    )[0];
+    // Copy before sorting so we don't mutate the original payload array.
+    const latestEvent = data.events
+      ? [...data.events].sort(
+          (a, b) => new Date(b.occurred_at) - new Date(a.occurred_at),
+        )[0]
+      : undefined;
 
     const incomingEdd = data.estimated_delivery_date || null;
 
@@ -216,7 +219,7 @@ exports.handler = async (event) => {
       (topLevelDesc.includes("out for delivery") ||
         latestEventDesc.includes("out for delivery"));
 
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = getLocalDateString();
     let skipOfdNotification = false;
 
     // 2. Build the base Update parameters
