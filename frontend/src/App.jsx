@@ -808,12 +808,18 @@ export default function App() {
                                       </thead>
                                       <tbody className="divide-y divide-slate-800 bg-transparent">
                                         {sortedEvents.map((event, index) => {
-                                          const location = [
-                                            event.cityLocality,
-                                            event.stateProvince,
-                                          ]
-                                            .filter(Boolean)
-                                            .join(", ");
+                                          // City/state when available; otherwise
+                                          // fall back to country (covers international
+                                          // events where city/state are null).
+                                          const location =
+                                            [
+                                              event.cityLocality,
+                                              event.stateProvince,
+                                            ]
+                                              .filter(Boolean)
+                                              .join(", ") ||
+                                            event.countryCode ||
+                                            "";
                                           return (
                                             <tr
                                               key={index}
