@@ -112,8 +112,8 @@ async function sendPushNotification(
 }
 
 exports.handler = async (event) => {
-  console.log("Received webhook event:", JSON.stringify(event, null, 2));
-
+  // Avoid logging the full event: webhook bodies contain shipment PII
+  // (signers, geolocation). Per-step logs below reference the tracking number.
   try {
     // Verify the request genuinely came from ShipEngine before trusting any of
     // its contents. Bypass only for local testing (events/event.json has no
@@ -334,10 +334,7 @@ exports.handler = async (event) => {
         "Content-Type": "application/json",
         "X-Robots-Tag": "noindex, nofollow",
       },
-      body: JSON.stringify({
-        message: "Internal Server Error",
-        error: error.message,
-      }),
+      body: JSON.stringify({ message: "Internal Server Error" }),
     };
   }
 };

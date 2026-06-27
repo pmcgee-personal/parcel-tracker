@@ -30,9 +30,7 @@ async function scanAll(docClient, params) {
   return accumulatedItems;
 }
 
-exports.handler = async (event) => {
-  console.log("EVENT: \n" + JSON.stringify(event, null, 2));
-
+exports.handler = async () => {
   try {
     // 1. Scan Shipments with Pagination Support
     const params = {

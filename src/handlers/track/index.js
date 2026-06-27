@@ -13,6 +13,20 @@ const secretsClient = new SecretsManagerClient({
 
 const SECRET_NAME = process.env.SECRET_NAME;
 
+const RESPONSE_HEADERS = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "X-Robots-Tag": "noindex, nofollow",
+};
+
+const jsonResponse = (statusCode, body) => ({
+  statusCode,
+  headers: RESPONSE_HEADERS,
+  body: JSON.stringify(body),
+});
+
 let shipStationApiKey = null;
 
 const getApiKey = async () => {
@@ -31,32 +45,38 @@ const getApiKey = async () => {
 };
 
 exports.handler = async (event) => {
-  console.log(
-    "TrackLambda invoked with event:",
-    JSON.stringify(event, null, 2),
-  );
-
   try {
-    const body = JSON.parse(event.body);
+    let body;
+    try {
+      body = JSON.parse(event.body);
+    } catch {
+      return jsonResponse(400, { message: "Invalid JSON body" });
+    }
+
     const { trackingNumber, carrier, direction, source, serviceLevel } = body;
 
     if (!trackingNumber || !carrier) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          message: "trackingNumber and carrier are required",
-        }),
-      };
+      return jsonResponse(400, {
+        message: "trackingNumber and carrier are required",
+      });
+    }
+
+    // These values are interpolated into the ShipEngine URL, so constrain them
+    // to safe characters before use (and URL-encode them below).
+    if (!/^[A-Za-z0-9 -]{4,40}$/.test(trackingNumber)) {
+      return jsonResponse(400, { message: "Invalid trackingNumber format" });
+    }
+    if (!/^[a-z0-9_]{2,40}$/.test(carrier)) {
+      return jsonResponse(400, { message: "Invalid carrier format" });
     }
 
     const apiKey = await getApiKey();
 
-    console.log(
-      `Fetching tracking data and starting webhook for ${trackingNumber}...`,
-    );
+    console.log(`Registering ${trackingNumber} via carrier ${carrier}`);
 
-    const trackingUrl = `https://api.shipengine.com/v1/tracking?carrier_code=${carrier}&tracking_number=${trackingNumber}`;
-    const startTrackingUrl = `https://api.shipengine.com/v1/tracking/start?carrier_code=${carrier}&tracking_number=${trackingNumber}`;
+    const query = `carrier_code=${encodeURIComponent(carrier)}&tracking_number=${encodeURIComponent(trackingNumber)}`;
+    const trackingUrl = `https://api.shipengine.com/v1/tracking?${query}`;
+    const startTrackingUrl = `https://api.shipengine.com/v1/tracking/start?${query}`;
 
     // Execute both requests simultaneously
     const [trackingResponse, startTrackingResponse] = await Promise.all([
@@ -168,32 +188,10 @@ exports.handler = async (event) => {
       console.log(`Initial events written: ${trackingData.events.length}`);
     }
 
-    return {
-      statusCode: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "X-Robots-Tag": "noindex, nofollow",
-      },
-      body: JSON.stringify({ message: "Successfully registered package" }),
-    };
+    return jsonResponse(200, { message: "Successfully registered package" });
   } catch (error) {
+    // Log the detail for CloudWatch, but don't leak internals to the client.
     console.error("Error in TrackLambda:", error);
-    return {
-      statusCode: 500, // Returning 500 here ensures your frontend sees the error
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "X-Robots-Tag": "noindex, nofollow",
-      },
-      body: JSON.stringify({
-        message: "Internal Server Error",
-        error: error.message, // Passes the specific fetch error to the UI
-      }),
-    };
+    return jsonResponse(500, { message: "Internal Server Error" });
   }
 };
