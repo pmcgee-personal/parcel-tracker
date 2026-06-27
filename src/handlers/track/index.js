@@ -3,7 +3,12 @@ const {
   SecretsManagerClient,
   GetSecretValueCommand,
 } = require("@aws-sdk/client-secrets-manager");
-const { docClient, SHIPMENTS_TABLE, EVENTS_TABLE } = require("../../lib/ddb");
+const {
+  docClient,
+  SHIPMENTS_TABLE,
+  EVENTS_TABLE,
+  batchWrite,
+} = require("../../lib/ddb");
 const { mapTrackingEvent } = require("../../lib/events");
 const { getDateOnly } = require("../../lib/dates");
 
@@ -178,14 +183,21 @@ exports.handler = async (event) => {
     );
 
     if (trackingData.events && trackingData.events.length > 0) {
+      // Drop events without a sort key and de-duplicate by occurredAt, since
+      // BatchWrite rejects a batch containing duplicate primary keys.
+      const byOccurredAt = new Map();
       for (const trackingEvent of trackingData.events) {
-        const eventPutCommand = new PutCommand({
-          TableName: EVENTS_TABLE,
-          Item: mapTrackingEvent(trackingData.tracking_number, trackingEvent),
-        });
-        await docClient.send(eventPutCommand);
+        if (!trackingEvent.occurred_at) continue;
+        byOccurredAt.set(
+          trackingEvent.occurred_at,
+          mapTrackingEvent(trackingData.tracking_number, trackingEvent),
+        );
       }
-      console.log(`Initial events written: ${trackingData.events.length}`);
+      const eventItems = [...byOccurredAt.values()];
+      if (eventItems.length > 0) {
+        await batchWrite(EVENTS_TABLE, eventItems);
+        console.log(`Initial events written: ${eventItems.length}`);
+      }
     }
 
     return jsonResponse(200, { message: "Successfully registered package" });

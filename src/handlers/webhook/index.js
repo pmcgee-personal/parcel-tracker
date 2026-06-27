@@ -290,28 +290,32 @@ exports.handler = async (event) => {
     await sendPushNotification(data, direction, source, skipOfdNotification);
 
     const trackingEvents = data.events || [];
-    let newEventsCount = 0,
-      duplicateEventsCount = 0;
 
-    for (const trackingEvent of trackingEvents) {
-      const occurredAt = trackingEvent.occurred_at;
-      if (!occurredAt) continue;
+    // Write events concurrently. Each keeps its conditional put so duplicates
+    // (same occurredAt) are skipped — BatchWrite can't express that condition.
+    const results = await Promise.all(
+      trackingEvents
+        .filter((trackingEvent) => trackingEvent.occurred_at)
+        .map((trackingEvent) =>
+          docClient
+            .send(
+              new PutCommand({
+                TableName: EVENTS_TABLE,
+                Item: mapTrackingEvent(trackingNumber, trackingEvent),
+                ConditionExpression: "attribute_not_exists(occurredAt)",
+              }),
+            )
+            .then(() => "new")
+            .catch((err) => {
+              if (err.name === "ConditionalCheckFailedException")
+                return "duplicate";
+              throw err;
+            }),
+        ),
+    );
 
-      const eventParams = {
-        TableName: EVENTS_TABLE,
-        Item: mapTrackingEvent(trackingNumber, trackingEvent),
-        ConditionExpression: "attribute_not_exists(occurredAt)",
-      };
-
-      try {
-        await docClient.send(new PutCommand(eventParams));
-        newEventsCount++;
-      } catch (err) {
-        if (err.name === "ConditionalCheckFailedException")
-          duplicateEventsCount++;
-        else throw err;
-      }
-    }
+    const newEventsCount = results.filter((r) => r === "new").length;
+    const duplicateEventsCount = results.filter((r) => r === "duplicate").length;
 
     return {
       statusCode: 200,
