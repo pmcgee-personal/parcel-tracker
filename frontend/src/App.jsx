@@ -240,10 +240,10 @@ export default function App() {
 
         {/* Control Panel */}
         <div className="bg-slate-800/40 p-5 rounded-xl border border-slate-700 mb-8 shadow-lg backdrop-blur-sm">
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-end">
             <form
               onSubmit={handleAddShipment}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 flex-1"
             >
               <input
                 type="text"
@@ -291,7 +291,7 @@ export default function App() {
               <button
                 type="submit"
                 disabled={isSubmitting || !isFormValid}
-                className="sm:col-span-1 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md"
+                className="sm:col-span-2 lg:col-auto bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md whitespace-nowrap"
               >
                 {isSubmitting ? "Adding..." : "Add Shipment"}
               </button>
@@ -300,7 +300,7 @@ export default function App() {
             <button
               onClick={fetchShipments}
               disabled={loading}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 px-4 py-2 rounded-lg text-sm font-semibold transition-colors border border-slate-600"
+              className="w-full lg:w-auto flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 px-4 py-2 rounded-lg text-sm font-semibold transition-colors border border-slate-600"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
