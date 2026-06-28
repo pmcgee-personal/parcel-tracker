@@ -452,10 +452,10 @@ export default function App() {
 
         {/* Control Panel */}
         <div className="bg-slate-800/40 p-5 rounded-xl border border-slate-700 mb-8 shadow-lg backdrop-blur-sm">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex flex-col gap-4">
             <form
               onSubmit={handleAddShipment}
-              className="flex flex-wrap items-center gap-3 w-full md:w-auto"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"
             >
               <input
                 type="text"
@@ -503,7 +503,7 @@ export default function App() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md"
+                className="sm:col-span-1 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md"
               >
                 {isSubmitting ? "Adding..." : "Add Shipment"}
               </button>
@@ -512,7 +512,7 @@ export default function App() {
             <button
               onClick={fetchShipments}
               disabled={loading}
-              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 px-4 py-2 rounded-lg text-sm font-semibold transition-colors border border-slate-600"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 px-4 py-2 rounded-lg text-sm font-semibold transition-colors border border-slate-600"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -574,8 +574,8 @@ export default function App() {
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-500"></div>
                 </div>
               )}
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-700/50">
+              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                <table className="min-w-full divide-y divide-slate-700/50 text-sm sm:text-base">
                   <thead className="bg-slate-900/50">
                     <tr>
                       <th
@@ -590,7 +590,7 @@ export default function App() {
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                        className="hidden sm:table-cell px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                       >
                         Direction
                       </th>
@@ -602,31 +602,31 @@ export default function App() {
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                        className="hidden lg:table-cell px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                       >
                         Label Gen.
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                        className="hidden md:table-cell px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                       >
                         Shipped On
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                        className="hidden sm:table-cell px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                       >
                         Est. Delivery
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                        className="hidden md:table-cell px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                       >
                         Delivered On
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                        className="hidden lg:table-cell px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                       >
                         Last Activity
                       </th>
@@ -687,14 +687,14 @@ export default function App() {
                             </td>
 
                             {/* Tracking Info */}
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-semibold text-white tracking-wide">
+                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                              <div className="text-xs sm:text-sm font-semibold text-white tracking-wide break-all sm:break-normal">
                                 {shipment.trackingNumber}
                               </div>
                               <div className="text-xs text-slate-500 uppercase mt-0.5 font-medium tracking-wider">
                                 {shipment.carrier}{" "}
                                 {shipment.serviceLevel && (
-                                  <span className="text-slate-400 normal-case italic">
+                                  <span className="text-slate-400 normal-case italic text-[10px] sm:text-xs">
                                     — {shipment.serviceLevel}
                                   </span>
                                 )}
@@ -702,7 +702,7 @@ export default function App() {
                             </td>
 
                             {/* Direction */}
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap">
                               <span
                                 className={`inline-flex items-center gap-x-2 px-2.5 py-1 rounded-full text-xs font-medium border ${shipment.direction === "Inbound" ? "bg-blue-900/30 text-blue-400 border-blue-800/50" : "bg-purple-900/30 text-purple-400 border-purple-800/50"}`}
                               >
@@ -731,21 +731,21 @@ export default function App() {
                             </td>
 
                             {/* Status */}
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                               <span
-                                className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wide ${getStatusStyle(shipment.statusCode)}`}
+                                className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wide ${getStatusStyle(shipment.statusCode)}`}
                               >
                                 {shipment.statusDescription}
                               </span>
                             </td>
 
                             {/* Label Gen. */}
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                            <td className="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               {getLabelGeneratedDate(shipment) || "—"}
                             </td>
 
                             {/* Shipped On */}
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                            <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               {shipment.shipDate
                                 ? new Date(
                                     shipment.shipDate,
@@ -757,19 +757,19 @@ export default function App() {
                             </td>
 
                             {/* Est Delivery (With Drift Component) */}
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                            <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               <EstimatedDeliveryWithHistory
                                 shipment={shipment}
                               />
                             </td>
 
                             {/* Delivered On (With Drift Component) */}
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                            <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                               <DeliveredOnWithDrift shipment={shipment} />
                             </td>
 
                             {/* Last Activity */}
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
+                            <td className="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-slate-400">
                               {shipment.lastEventTimestamp
                                 ? timeSince(shipment.lastEventTimestamp)
                                 : "No events recorded"}
