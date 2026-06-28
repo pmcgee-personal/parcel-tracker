@@ -7,6 +7,7 @@ import {
   sanitizeCarrier,
   sanitizeTextField,
 } from "./utils/sanitize";
+import { sortShipments } from "./utils/sortShipments";
 
 export default function App() {
   const [shipments, setShipments] = useState([]);
@@ -68,39 +69,13 @@ export default function App() {
           : responseData.shipments || [];
         const pagination = responseData.pagination || null;
 
-        const sortedData = shipmentList.sort((a, b) => {
-          const activeStatuses = ["IT", "EX", "AC", "OFD"];
-          const isA_Active = activeStatuses.includes(a.statusCode);
-          const isB_Active = activeStatuses.includes(b.statusCode);
-
-          if (isA_Active && !isB_Active) return -1;
-          if (!isA_Active && isB_Active) return 1;
-
-          if (isA_Active && isB_Active) {
-            const dateA = a.estimatedDeliveryDate
-              ? new Date(a.estimatedDeliveryDate)
-              : null;
-            const dateB = b.estimatedDeliveryDate
-              ? new Date(b.estimatedDeliveryDate)
-              : null;
-            if (!dateA) return 1;
-            if (!dateB) return -1;
-            return dateA - dateB;
-          }
-
-          const dateA = a.actualDeliveryDate
-            ? new Date(a.actualDeliveryDate)
-            : null;
-          const dateB = b.actualDeliveryDate
-            ? new Date(b.actualDeliveryDate)
-            : null;
-          if (!dateA) return 1;
-          if (!dateB) return -1;
-          return dateB - dateA;
-        });
+        // Sort shipments using the canonical sorting function
+        const sortedData = sortShipments(shipmentList);
 
         if (isLoadMore) {
-          setShipments((prev) => [...prev, ...sortedData]);
+          // Combine with existing shipments and re-sort the entire list
+          // to maintain correct order across paginated results
+          setShipments((prev) => sortShipments([...prev, ...sortedData]));
         } else {
           setShipments(sortedData);
         }
