@@ -9,7 +9,7 @@ const generateRequestId = () => {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 };
 
-// NEW helper to recursively scan a table and handle the 1MB Scan Limit
+// Helper to scan all items (used for events where we need full dataset)
 async function scanAll(docClient, params) {
   let accumulatedItems = [];
   let lastEvaluatedKey = null;
@@ -27,20 +27,45 @@ async function scanAll(docClient, params) {
       accumulatedItems = accumulatedItems.concat(response.Items);
     }
 
-    // If this exists, there is more data left in the table!
     lastEvaluatedKey = response.LastEvaluatedKey;
   } while (lastEvaluatedKey);
 
   return accumulatedItems;
 }
 
-exports.handler = async () => {
+// Helper to scan with pagination support
+async function scanWithPagination(docClient, params, limit, nextToken) {
+  const scanParams = { ...params, Limit: limit };
+  if (nextToken) {
+    scanParams.ExclusiveStartKey = JSON.parse(Buffer.from(nextToken, "base64").toString());
+  }
+
+  const command = new ScanCommand(scanParams);
+  const response = await docClient.send(command);
+
+  return {
+    items: response.Items || [],
+    nextToken: response.LastEvaluatedKey
+      ? Buffer.from(JSON.stringify(response.LastEvaluatedKey)).toString("base64")
+      : null,
+  };
+}
+
+exports.handler = async (event) => {
   const requestId = generateRequestId();
   try {
-    console.log(`[${requestId}] Fetching shipments and events`);
+    // Parse query parameters
+    const queryParams = event.queryStringParameters || {};
+    const limit = Math.min(parseInt(queryParams.limit) || 50, 100); // Max 100, default 50
+    const nextToken = queryParams.nextToken || null;
+    const statusFilter = queryParams.status || null; // Optional: filter by status
 
-    // 1. Scan Shipments with Pagination Support
-    const params = {
+    console.log(
+      `[${requestId}] Fetching shipments (limit: ${limit}, status: ${statusFilter || "all"})`,
+    );
+
+    // 1. Scan Shipments with Pagination
+    const shipmentParams = {
       TableName: TABLE_NAME,
       ProjectionExpression:
         "carrier, trackingNumber, #src, direction, statusCode, statusDescription, estimatedDeliveryDate, estimatedDeliveryHistory, actualDeliveryDate, shipDate, lastEventTimestamp, serviceLevel",
@@ -49,10 +74,26 @@ exports.handler = async () => {
       },
     };
 
-    const shipmentItems = await scanAll(docClient, params);
-    console.log(`[${requestId}] Retrieved ${shipmentItems.length} shipments`);
+    // Add status filter if provided (e.g., ?status=active to show only non-delivered)
+    if (statusFilter === "active") {
+      shipmentParams.FilterExpression = "attribute_exists(statusCode) AND statusCode <> :delivered";
+      shipmentParams.ExpressionAttributeValues = { ":delivered": "DE" };
+    }
 
-    // 2. Scan Events with Pagination Support
+    const shipmentResult = await scanWithPagination(
+      docClient,
+      shipmentParams,
+      limit,
+      nextToken,
+    );
+    const shipmentItems = shipmentResult.items;
+    const responseNextToken = shipmentResult.nextToken;
+
+    console.log(
+      `[${requestId}] Retrieved ${shipmentItems.length} shipments (nextToken: ${responseNextToken ? "present" : "none"})`,
+    );
+
+    // 2. Scan ALL Events (needed to match with paginated shipments)
     let eventItems = [];
     if (EVENTS_TABLE) {
       eventItems = await scanAll(docClient, { TableName: EVENTS_TABLE });
@@ -63,8 +104,7 @@ exports.handler = async () => {
       );
     }
 
-    // 3. Group events by tracking number once, then attach.
-    // O(n + m) instead of filtering all events for every shipment (O(n * m)).
+    // 3. Group events by tracking number
     const eventsByTracking = new Map();
     for (const e of eventItems) {
       const list = eventsByTracking.get(e.trackingNumber);
@@ -93,7 +133,14 @@ exports.handler = async () => {
         "Access-Control-Allow-Origin": "*",
         "X-Robots-Tag": "noindex, nofollow",
       },
-      body: JSON.stringify(shipmentsWithEvents),
+      body: JSON.stringify({
+        shipments: shipmentsWithEvents,
+        pagination: {
+          limit,
+          nextToken: responseNextToken,
+          hasMore: !!responseNextToken,
+        },
+      }),
     };
   } catch (error) {
     console.error(`[${requestId}] Error retrieving shipments:`, error.message);

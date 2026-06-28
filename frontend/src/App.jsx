@@ -21,6 +21,10 @@ export default function App() {
   // Expandable Dropdowns
   const [expandedShipments, setExpandedShipments] = useState(new Set());
 
+  // Pagination state
+  const [nextToken, setNextToken] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+
   const API_URL = import.meta.env.VITE_API_BASE_URL;
   const API_KEY = import.meta.env.VITE_API_KEY;
 
@@ -34,56 +38,80 @@ export default function App() {
     setExpandedShipments(newExpanded);
   };
 
-  const fetchShipments = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(API_URL, {
-        headers: { "x-api-key": API_KEY },
-      });
-      if (!response.ok) {
-        throw new Error(`API error: ${response.statusText}`);
-      }
-      const data = await response.json();
-      const sortedData = data.sort((a, b) => {
-        const activeStatuses = ["IT", "EX", "AC", "OFD"];
-        const isA_Active = activeStatuses.includes(a.statusCode);
-        const isB_Active = activeStatuses.includes(b.statusCode);
+  const fetchShipments = useCallback(
+    async (token = null, isLoadMore = false) => {
+      try {
+        setLoading(true);
+        const url = new URL(API_URL);
+        url.searchParams.set("limit", "50");
+        if (token) {
+          url.searchParams.set("nextToken", token);
+        }
 
-        if (isA_Active && !isB_Active) return -1;
-        if (!isA_Active && isB_Active) return 1;
+        const response = await fetch(url.toString(), {
+          headers: { "x-api-key": API_KEY },
+        });
+        if (!response.ok) {
+          throw new Error(`API error: ${response.statusText}`);
+        }
 
-        if (isA_Active && isB_Active) {
-          const dateA = a.estimatedDeliveryDate
-            ? new Date(a.estimatedDeliveryDate)
+        const responseData = await response.json();
+
+        // Handle both old array format and new paginated format
+        const shipmentList = Array.isArray(responseData)
+          ? responseData
+          : responseData.shipments || [];
+        const pagination = responseData.pagination || null;
+
+        const sortedData = shipmentList.sort((a, b) => {
+          const activeStatuses = ["IT", "EX", "AC", "OFD"];
+          const isA_Active = activeStatuses.includes(a.statusCode);
+          const isB_Active = activeStatuses.includes(b.statusCode);
+
+          if (isA_Active && !isB_Active) return -1;
+          if (!isA_Active && isB_Active) return 1;
+
+          if (isA_Active && isB_Active) {
+            const dateA = a.estimatedDeliveryDate
+              ? new Date(a.estimatedDeliveryDate)
+              : null;
+            const dateB = b.estimatedDeliveryDate
+              ? new Date(b.estimatedDeliveryDate)
+              : null;
+            if (!dateA) return 1;
+            if (!dateB) return -1;
+            return dateA - dateB;
+          }
+
+          const dateA = a.actualDeliveryDate
+            ? new Date(a.actualDeliveryDate)
             : null;
-          const dateB = b.estimatedDeliveryDate
-            ? new Date(b.estimatedDeliveryDate)
+          const dateB = b.actualDeliveryDate
+            ? new Date(b.actualDeliveryDate)
             : null;
           if (!dateA) return 1;
           if (!dateB) return -1;
-          return dateA - dateB;
+          return dateB - dateA;
+        });
+
+        if (isLoadMore) {
+          setShipments((prev) => [...prev, ...sortedData]);
+        } else {
+          setShipments(sortedData);
         }
 
-        const dateA = a.actualDeliveryDate
-          ? new Date(a.actualDeliveryDate)
-          : null;
-        const dateB = b.actualDeliveryDate
-          ? new Date(b.actualDeliveryDate)
-          : null;
-        if (!dateA) return 1;
-        if (!dateB) return -1;
-        return dateB - dateA;
-      });
-
-      setShipments(sortedData);
-      setError(null);
-    } catch (err) {
-      console.error("Failed to fetch shipments:", err);
-      setError("Could not load shipments. Please check your API deployment.");
-    } finally {
-      setLoading(false);
-    }
-  }, [API_URL, API_KEY]);
+        setNextToken(pagination?.nextToken || null);
+        setHasMore(pagination?.hasMore || false);
+        setError(null);
+      } catch (err) {
+        console.error("Failed to fetch shipments:", err);
+        setError("Could not load shipments. Please check your API deployment.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [API_URL, API_KEY],
+  );
 
   useEffect(() => {
     fetchShipments();
@@ -322,17 +350,29 @@ export default function App() {
               </div>
             </div>
 
-            {/* Pagination / Show All */}
-            {(hasHiddenShipments || showAll) && (
-              <div className="mt-6 flex justify-center">
+            {/* Pagination Controls */}
+            <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center items-center">
+              {/* Load More Button (Server-side pagination) */}
+              {hasMore && (
+                <button
+                  onClick={() => fetchShipments(nextToken, true)}
+                  disabled={loading}
+                  className="px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-full text-sm font-semibold transition-all border border-cyan-600 shadow-md flex items-center gap-2"
+                >
+                  Load More Shipments
+                </button>
+              )}
+
+              {/* Show All Deliveries Toggle (Client-side filtering) */}
+              {hasHiddenShipments && (
                 <button
                   onClick={() => setShowAll(!showAll)}
                   className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full text-sm font-semibold transition-all border border-slate-700 shadow-md flex items-center gap-2"
                 >
                   {showAll ? "Hide Older Deliveries" : "Show All Deliveries"}
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </>
         )}
       </div>
