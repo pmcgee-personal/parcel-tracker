@@ -2,6 +2,11 @@ import React, { useEffect, useState, useCallback } from "react";
 import ShipmentForm from "./components/ShipmentForm";
 import ShipmentCard from "./components/ShipmentCard";
 import { getStatusStyle, getLabelGeneratedDate } from "./utils/shipmentHelpers";
+import {
+  sanitizeTrackingNumber,
+  sanitizeCarrier,
+  sanitizeTextField,
+} from "./utils/sanitize";
 
 export default function App() {
   const [shipments, setShipments] = useState([]);
@@ -118,26 +123,32 @@ export default function App() {
   }, [fetchShipments]);
 
   const validateForm = (tracking = newTracking, carrier = newCarrier) => {
-    const trimmedTracking = tracking.trim();
-    const trimmedCarrier = carrier.trim();
+    // Sanitize inputs first
+    const sanitizedTracking = sanitizeTrackingNumber(tracking);
+    const sanitizedCarrier = sanitizeCarrier(carrier);
 
-    if (!trimmedTracking) {
+    if (!sanitizedTracking) {
       return { valid: false, error: "Tracking number is required" };
     }
 
-    if (trimmedTracking.length < 3) {
-      return { valid: false, error: "Tracking number must be at least 3 characters" };
+    if (sanitizedTracking.length < 3) {
+      return {
+        valid: false,
+        error: "Tracking number must be at least 3 characters",
+      };
     }
 
-    if (!trimmedCarrier) {
+    if (!sanitizedCarrier) {
       return { valid: false, error: "Carrier selection is required" };
     }
 
-    if (newServiceLevel.trim().length > 100) {
+    const sanitizedServiceLevel = sanitizeTextField(newServiceLevel, 100);
+    if (sanitizedServiceLevel.length > 100) {
       return { valid: false, error: "Service level is too long" };
     }
 
-    if (newSource.trim().length > 100) {
+    const sanitizedSource = sanitizeTextField(newSource, 100);
+    if (sanitizedSource.length > 100) {
       return { valid: false, error: "Source is too long" };
     }
 
@@ -159,15 +170,21 @@ export default function App() {
     setActionMessage({ type: "", text: "" });
 
     try {
+      // Sanitize all inputs before sending to API
+      const sanitizedTracking = sanitizeTrackingNumber(newTracking);
+      const sanitizedCarrier = sanitizeCarrier(newCarrier);
+      const sanitizedServiceLevel = sanitizeTextField(newServiceLevel, 100);
+      const sanitizedSource = sanitizeTextField(newSource, 100);
+
       const response = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
         body: JSON.stringify({
-          trackingNumber: newTracking,
-          carrier: newCarrier.toLowerCase(),
+          trackingNumber: sanitizedTracking,
+          carrier: sanitizedCarrier,
           direction: newDirection,
-          serviceLevel: newServiceLevel,
-          source: newSource,
+          serviceLevel: sanitizedServiceLevel,
+          source: sanitizedSource,
         }),
       });
 
@@ -175,7 +192,7 @@ export default function App() {
 
       setActionMessage({
         type: "success",
-        text: `Successfully added ${newTracking}`,
+        text: `Successfully added ${sanitizedTracking}`,
       });
 
       setNewTracking("");
