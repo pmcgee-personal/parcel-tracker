@@ -254,13 +254,18 @@ exports.handler = async (event) => {
     };
 
     // If it is Out For Delivery, determine if we should notify, and update the DB flag if we do
+    let conditionExpression = null;
     if (isOutForDelivery) {
       if (lastOfdDate === todayStr) {
         skipOfdNotification = true; // We already sent one today
       } else {
-        // First time today: Update the DB so we know for next time
+        // First time today: Update the DB atomically so we know for next time
+        // Use atomic condition to prevent race condition: only update if lastOfdDate is NOT today
         updateExpression += ", lastOfdDate = :todayStr";
         expressionAttributeValues[":todayStr"] = todayStr;
+        // Atomic check: only allow this update if lastOfdDate is different from today OR doesn't exist
+        conditionExpression =
+          "(attribute_not_exists(lastOfdDate) OR lastOfdDate <> :todayStr)";
       }
     }
 
@@ -291,10 +296,31 @@ exports.handler = async (event) => {
       ExpressionAttributeValues: expressionAttributeValues,
     };
 
+    // Add atomic condition for OFD dedup if needed
+    if (conditionExpression) {
+      shipmentParams.ConditionExpression = conditionExpression;
+    }
+
     console.log(
       `[${requestId}] Updating shipment details for: ${trackingNumber}`,
     );
-    await docClient.send(new UpdateCommand(shipmentParams));
+    try {
+      await docClient.send(new UpdateCommand(shipmentParams));
+    } catch (err) {
+      // If the OFD condition fails (duplicate from concurrent request), that's ok
+      // We still process events and skip the notification
+      if (err.name === "ConditionalCheckFailedException" && isOutForDelivery) {
+        console.log(
+          `[${requestId}] OFD notification already sent today (concurrent request), skipping`,
+        );
+        skipOfdNotification = true;
+        // Re-throw to skip further processing since this is a duplicate
+        throw new Error(
+          `Duplicate OFD notification for ${trackingNumber} (already processed today)`,
+        );
+      }
+      throw err;
+    }
 
     // ==============================================================
     // TRIGGER NOTIFICATION AFTER SUCCESSFUL SHIPMENT UPDATE
