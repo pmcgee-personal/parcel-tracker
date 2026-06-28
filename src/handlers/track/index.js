@@ -12,6 +12,10 @@ const {
 const { mapTrackingEvent } = require("../../lib/events");
 const { getDateOnly } = require("../../lib/dates");
 
+const generateRequestId = () => {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
 const secretsClient = new SecretsManagerClient({
   region: process.env.AWS_REGION,
 });
@@ -50,34 +54,51 @@ const getApiKey = async () => {
 };
 
 exports.handler = async (event) => {
+  const requestId = generateRequestId();
   try {
     let body;
     try {
       body = JSON.parse(event.body);
     } catch {
-      return jsonResponse(400, { message: "Invalid JSON body" });
+      console.warn(`[${requestId}] Invalid JSON body`);
+      return jsonResponse(400, {
+        message: "Invalid JSON body",
+        requestId,
+      });
     }
 
     const { trackingNumber, carrier, direction, source, serviceLevel } = body;
 
     if (!trackingNumber || !carrier) {
+      console.warn(`[${requestId}] Missing required fields`);
       return jsonResponse(400, {
         message: "trackingNumber and carrier are required",
+        requestId,
       });
     }
 
     // These values are interpolated into the ShipEngine URL, so constrain them
     // to safe characters before use (and URL-encode them below).
     if (!/^[A-Za-z0-9 -]{4,40}$/.test(trackingNumber)) {
-      return jsonResponse(400, { message: "Invalid trackingNumber format" });
+      console.warn(`[${requestId}] Invalid trackingNumber format`);
+      return jsonResponse(400, {
+        message: "Invalid trackingNumber format",
+        requestId,
+      });
     }
     if (!/^[a-z0-9_]{2,40}$/.test(carrier)) {
-      return jsonResponse(400, { message: "Invalid carrier format" });
+      console.warn(`[${requestId}] Invalid carrier format`);
+      return jsonResponse(400, {
+        message: "Invalid carrier format",
+        requestId,
+      });
     }
 
     const apiKey = await getApiKey();
 
-    console.log(`Registering ${trackingNumber} via carrier ${carrier}`);
+    console.log(
+      `[${requestId}] Registering ${trackingNumber} via carrier ${carrier}`,
+    );
 
     const query = `carrier_code=${encodeURIComponent(carrier)}&tracking_number=${encodeURIComponent(trackingNumber)}`;
     const trackingUrl = `https://api.shipengine.com/v1/tracking?${query}`;
@@ -98,7 +119,10 @@ exports.handler = async (event) => {
     // Check if the get tracking data request failed
     if (!trackingResponse.ok) {
       const errorText = await trackingResponse.text();
-      console.error("ShipEngine API GET Tracking error:", errorText);
+      console.error(
+        `[${requestId}] ShipEngine API GET Tracking error:`,
+        errorText,
+      );
       throw new Error(
         `ShipEngine API (Get Tracking) failed with status ${trackingResponse.status}: ${errorText}`,
       );
@@ -107,7 +131,10 @@ exports.handler = async (event) => {
     // Check if the webhook registration request failed
     if (!startTrackingResponse.ok) {
       const errorText = await startTrackingResponse.text();
-      console.error("ShipEngine API POST Start Tracking error:", errorText);
+      console.error(
+        `[${requestId}] ShipEngine API POST Start Tracking error:`,
+        errorText,
+      );
       throw new Error(
         `ShipEngine API (Start Webhook) failed with status ${startTrackingResponse.status}: ${errorText}`,
       );
@@ -178,7 +205,7 @@ exports.handler = async (event) => {
     });
     await docClient.send(shipmentPutCommand);
     console.log(
-      "Shipment record written with history size:",
+      `[${requestId}] Shipment record written with history size:`,
       existingHistory.length,
     );
 
@@ -196,14 +223,21 @@ exports.handler = async (event) => {
       const eventItems = [...byOccurredAt.values()];
       if (eventItems.length > 0) {
         await batchWrite(EVENTS_TABLE, eventItems);
-        console.log(`Initial events written: ${eventItems.length}`);
+        console.log(`[${requestId}] Initial events written: ${eventItems.length}`);
       }
     }
 
-    return jsonResponse(200, { message: "Successfully registered package" });
+    console.log(`[${requestId}] Successfully registered package: ${trackingNumber}`);
+    return jsonResponse(200, {
+      message: "Successfully registered package",
+      requestId,
+    });
   } catch (error) {
     // Log the detail for CloudWatch, but don't leak internals to the client.
-    console.error("Error in TrackLambda:", error);
-    return jsonResponse(500, { message: "Internal Server Error" });
+    console.error(`[${requestId}] Error in TrackLambda:`, error.message);
+    return jsonResponse(500, {
+      message: "Internal Server Error",
+      requestId,
+    });
   }
 };

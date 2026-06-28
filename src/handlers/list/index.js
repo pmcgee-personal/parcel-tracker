@@ -5,6 +5,10 @@ const {
   EVENTS_TABLE,
 } = require("../../lib/ddb");
 
+const generateRequestId = () => {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
 // NEW helper to recursively scan a table and handle the 1MB Scan Limit
 async function scanAll(docClient, params) {
   let accumulatedItems = [];
@@ -31,7 +35,10 @@ async function scanAll(docClient, params) {
 }
 
 exports.handler = async () => {
+  const requestId = generateRequestId();
   try {
+    console.log(`[${requestId}] Fetching shipments and events`);
+
     // 1. Scan Shipments with Pagination Support
     const params = {
       TableName: TABLE_NAME,
@@ -43,14 +50,16 @@ exports.handler = async () => {
     };
 
     const shipmentItems = await scanAll(docClient, params);
+    console.log(`[${requestId}] Retrieved ${shipmentItems.length} shipments`);
 
     // 2. Scan Events with Pagination Support
     let eventItems = [];
     if (EVENTS_TABLE) {
       eventItems = await scanAll(docClient, { TableName: EVENTS_TABLE });
+      console.log(`[${requestId}] Retrieved ${eventItems.length} events`);
     } else {
       console.warn(
-        "EVENTS_TABLE environment variable is missing. Events will not be loaded.",
+        `[${requestId}] EVENTS_TABLE environment variable is missing. Events will not be loaded.`,
       );
     }
 
@@ -75,6 +84,8 @@ exports.handler = async () => {
       return new Date(b.lastEventTimestamp) - new Date(a.lastEventTimestamp);
     });
 
+    console.log(`[${requestId}] Successfully fetched and formatted data`);
+
     return {
       statusCode: 200,
       headers: {
@@ -85,7 +96,7 @@ exports.handler = async () => {
       body: JSON.stringify(shipmentsWithEvents),
     };
   } catch (error) {
-    console.error("Error retrieving shipments:", error);
+    console.error(`[${requestId}] Error retrieving shipments:`, error.message);
     return {
       statusCode: 500,
       headers: {
@@ -93,7 +104,10 @@ exports.handler = async () => {
         "Access-Control-Allow-Origin": "*",
         "X-Robots-Tag": "noindex, nofollow",
       },
-      body: JSON.stringify({ message: "Internal Server Error" }),
+      body: JSON.stringify({
+        message: "Internal Server Error",
+        requestId,
+      }),
     };
   }
 };

@@ -10,6 +10,10 @@ const { docClient, SHIPMENTS_TABLE, EVENTS_TABLE } = require("../../lib/ddb");
 const { mapTrackingEvent } = require("../../lib/events");
 const { getDateOnly, getLocalDateString } = require("../../lib/dates");
 
+const generateRequestId = () => {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
 // NEW: Helper function to evaluate and send push notifications
 async function sendPushNotification(
   data,
@@ -112,6 +116,7 @@ async function sendPushNotification(
 }
 
 exports.handler = async (event) => {
+  const requestId = generateRequestId();
   // Avoid logging the full event: webhook bodies contain shipment PII
   // (signers, geolocation). Per-step logs below reference the tracking number.
   try {
@@ -119,14 +124,12 @@ exports.handler = async (event) => {
     // its contents. Bypass only for local testing (events/event.json has no
     // signature headers); never set WEBHOOK_VERIFY_DISABLED in a deployment.
     if (process.env.WEBHOOK_VERIFY_DISABLED === "true") {
-      console.warn(
-        "WEBHOOK_VERIFY_DISABLED is set — skipping ShipEngine signature verification.",
-      );
+      console.warn(`[${requestId}] WEBHOOK_VERIFY_DISABLED is set`);
     } else {
       const verification = await verifyShipEngineSignature(event);
       if (!verification.ok) {
         console.warn(
-          `Rejected webhook (${verification.status}): ${verification.reason}`,
+          `[${requestId}] Rejected webhook (${verification.status}): ${verification.reason}`,
         );
         return {
           statusCode: verification.status,
@@ -134,36 +137,44 @@ exports.handler = async (event) => {
             "Content-Type": "application/json",
             "X-Robots-Tag": "noindex, nofollow",
           },
-          body: JSON.stringify({ message: "Unauthorized" }),
+          body: JSON.stringify({ message: "Unauthorized", requestId }),
         };
       }
     }
 
-    if (!event.body)
+    if (!event.body) {
+      console.warn(`[${requestId}] Missing request body`);
       return {
         statusCode: 400,
-        body: JSON.stringify({ message: "Missing request body" }),
+        body: JSON.stringify({ message: "Missing request body", requestId }),
       };
+    }
 
     const payload = JSON.parse(event.body);
     const data = payload.data;
 
-    if (!data)
+    if (!data) {
+      console.warn(`[${requestId}] Missing data object in request body`);
       return {
         statusCode: 400,
         body: JSON.stringify({
           message: "Request body is missing the 'data' object",
+          requestId,
         }),
       };
+    }
 
     const trackingNumber = data.tracking_number;
-    if (!trackingNumber)
+    if (!trackingNumber) {
+      console.warn(`[${requestId}] Missing tracking_number in data`);
       return {
         statusCode: 400,
         body: JSON.stringify({
           message: "Missing tracking_number within the 'data' object",
+          requestId,
         }),
       };
+    }
 
     // 1. Fetch the existing shipment to check for date changes & grab metadata
     let existingEdd = null;
@@ -280,7 +291,9 @@ exports.handler = async (event) => {
       ExpressionAttributeValues: expressionAttributeValues,
     };
 
-    console.log(`Updating shipment details for: ${trackingNumber}`);
+    console.log(
+      `[${requestId}] Updating shipment details for: ${trackingNumber}`,
+    );
     await docClient.send(new UpdateCommand(shipmentParams));
 
     // ==============================================================
@@ -317,6 +330,10 @@ exports.handler = async (event) => {
     const newEventsCount = results.filter((r) => r === "new").length;
     const duplicateEventsCount = results.filter((r) => r === "duplicate").length;
 
+    console.log(
+      `[${requestId}] Successfully processed webhook for ${trackingNumber}: ${newEventsCount} new, ${duplicateEventsCount} duplicates`,
+    );
+
     return {
       statusCode: 200,
       headers: {
@@ -328,17 +345,21 @@ exports.handler = async (event) => {
         shipment: trackingNumber,
         newEventsAdded: newEventsCount,
         duplicatesIgnored: duplicateEventsCount,
+        requestId,
       }),
     };
   } catch (error) {
-    console.error("Error handling webhook:", error);
+    console.error(`[${requestId}] Error handling webhook:`, error.message);
     return {
       statusCode: 500,
       headers: {
         "Content-Type": "application/json",
         "X-Robots-Tag": "noindex, nofollow",
       },
-      body: JSON.stringify({ message: "Internal Server Error" }),
+      body: JSON.stringify({
+        message: "Internal Server Error",
+        requestId,
+      }),
     };
   }
 };
