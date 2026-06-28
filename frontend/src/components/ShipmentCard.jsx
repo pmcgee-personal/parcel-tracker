@@ -1,4 +1,5 @@
 import React from "react";
+import PropTypes from "prop-types";
 import { timeSince } from "../utils/timeUtils";
 import {
   EstimatedDeliveryWithHistory,
@@ -164,3 +165,36 @@ export default function ShipmentCard({
     </React.Fragment>
   );
 }
+
+ShipmentCard.propTypes = {
+  shipment: PropTypes.shape({
+    trackingNumber: PropTypes.string.isRequired,
+    carrier: PropTypes.string.isRequired,
+    serviceLevel: PropTypes.string,
+    direction: PropTypes.oneOf(["Inbound", "Outbound"]).isRequired,
+    statusCode: PropTypes.string.isRequired,
+    statusDescription: PropTypes.string.isRequired,
+    estimatedDeliveryDate: PropTypes.string,
+    actualDeliveryDate: PropTypes.string,
+    shipDate: PropTypes.string,
+    lastEventTimestamp: PropTypes.string,
+    events: PropTypes.arrayOf(
+      PropTypes.shape({
+        carrierOccurredAt: PropTypes.string.isRequired,
+        description: PropTypes.string.isRequired,
+        cityLocality: PropTypes.string,
+        stateProvince: PropTypes.string,
+        countryCode: PropTypes.string,
+      })
+    ),
+    estimatedDeliveryHistory: PropTypes.arrayOf(
+      PropTypes.shape({
+        date: PropTypes.string.isRequired,
+      })
+    ),
+  }).isRequired,
+  isExpanded: PropTypes.bool.isRequired,
+  onToggleExpand: PropTypes.func.isRequired,
+  getStatusStyle: PropTypes.func.isRequired,
+  getLabelGeneratedDate: PropTypes.func.isRequired,
+};

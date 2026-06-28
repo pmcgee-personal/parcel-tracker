@@ -1,4 +1,5 @@
 import React from "react";
+import PropTypes from "prop-types";
 
 export default function EventTimeline({ events }) {
   return (
@@ -61,3 +62,15 @@ export default function EventTimeline({ events }) {
     </div>
   );
 }
+
+EventTimeline.propTypes = {
+  events: PropTypes.arrayOf(
+    PropTypes.shape({
+      carrierOccurredAt: PropTypes.string.isRequired,
+      description: PropTypes.string.isRequired,
+      cityLocality: PropTypes.string,
+      stateProvince: PropTypes.string,
+      countryCode: PropTypes.string,
+    })
+  ).isRequired,
+};

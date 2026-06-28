@@ -1,4 +1,5 @@
 import React from "react";
+import PropTypes from "prop-types";
 
 export const EstimatedDeliveryWithHistory = ({ shipment }) => {
   if (!shipment.estimatedDeliveryDate) {
@@ -246,4 +247,27 @@ export const DeliveredOnWithDrift = ({ shipment }) => {
       </div>
     </div>
   );
+};
+
+EstimatedDeliveryWithHistory.propTypes = {
+  shipment: PropTypes.shape({
+    estimatedDeliveryDate: PropTypes.string,
+    estimatedDeliveryHistory: PropTypes.arrayOf(
+      PropTypes.shape({
+        date: PropTypes.string.isRequired,
+      })
+    ),
+  }).isRequired,
+};
+
+DeliveredOnWithDrift.propTypes = {
+  shipment: PropTypes.shape({
+    actualDeliveryDate: PropTypes.string,
+    estimatedDeliveryDate: PropTypes.string,
+    estimatedDeliveryHistory: PropTypes.arrayOf(
+      PropTypes.shape({
+        date: PropTypes.string.isRequired,
+      })
+    ),
+  }).isRequired,
 };

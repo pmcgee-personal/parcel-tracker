@@ -1,4 +1,5 @@
 import React from "react";
+import PropTypes from "prop-types";
 
 export default function ShipmentForm({
   tracking,
@@ -114,3 +115,25 @@ export default function ShipmentForm({
     </div>
   );
 }
+
+ShipmentForm.propTypes = {
+  tracking: PropTypes.string.isRequired,
+  setTracking: PropTypes.func.isRequired,
+  carrier: PropTypes.string.isRequired,
+  setCarrier: PropTypes.func.isRequired,
+  direction: PropTypes.string.isRequired,
+  setDirection: PropTypes.func.isRequired,
+  serviceLevel: PropTypes.string.isRequired,
+  setServiceLevel: PropTypes.func.isRequired,
+  source: PropTypes.string.isRequired,
+  setSource: PropTypes.func.isRequired,
+  isSubmitting: PropTypes.bool.isRequired,
+  isFormValid: PropTypes.bool.isRequired,
+  onSubmit: PropTypes.func.isRequired,
+  loading: PropTypes.bool.isRequired,
+  onRefresh: PropTypes.func.isRequired,
+  actionMessage: PropTypes.shape({
+    type: PropTypes.string,
+    text: PropTypes.string,
+  }).isRequired,
+};
