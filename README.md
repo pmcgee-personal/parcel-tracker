@@ -56,6 +56,18 @@ parcel-tracker/
 ├── .github/workflows/       # CI/CD workflows (GitHub Actions)
 ├── events/                  # Sample JSON payloads for local Lambda testing
 ├── frontend/                # React/Vite/Tailwind SPA dashboard
+│   ├── src/
+│   │   ├── components/      # Reusable React components
+│   │   │   ├── ShipmentForm.jsx      # Add tracking form + refresh button
+│   │   │   ├── ShipmentCard.jsx      # Individual shipment row + expand toggle
+│   │   │   └── EventTimeline.jsx     # Tracking events table
+│   │   ├── utils/
+│   │   │   ├── timeUtils.js          # Time formatting helpers
+│   │   │   └── shipmentHelpers.js    # Status styling, label date extraction
+│   │   ├── App.jsx                   # Main container component (refactored)
+│   │   ├── DriftIndicator.jsx        # Delivery date drift indicators
+│   │   └── main.jsx                  # Vite entry point
+│   └── package.json
 ├── src/
 │   ├── handlers/
 │   │   ├── webhook/         # Ingests carrier tracking updates (POST /webhook)
@@ -96,6 +108,51 @@ Stores the full timeline of tracking events per shipment.
 | `occurredAt`     | String | Sort key      |
 
 Both tables use on-demand billing (`BillingMode: PAY_PER_REQUEST`) so they self-scale with traffic, and both have `DeletionPolicy: Retain` — they survive stack teardown.
+
+---
+
+## Frontend Architecture
+
+The React frontend is organized into reusable, focused components:
+
+### Component Hierarchy
+
+```
+App.jsx (main container)
+├── State: shipments, loading, form fields, expandedShipments
+├── Logic: fetchShipments, validateForm, handleAddShipment
+│
+├─ ShipmentForm
+│  └─ Form inputs (tracking, carrier, direction, service level, source)
+│  └─ Refresh button & status messages
+│
+└─ ShipmentCard (map over visibleShipments)
+   ├─ Shipment row: tracking info, status badge, delivery dates
+   ├─ Direction badge (Inbound/Outbound)
+   ├─ Drift indicators (early/delayed delivery alerts)
+   ├─ Expand toggle button
+   │
+   └─ EventTimeline (expanded row)
+      └─ Tracking events table with timestamps, descriptions, locations
+```
+
+### Components
+
+| Component | Lines | Purpose |
+|-----------|-------|---------|
+| **App.jsx** | 342 | Main state container, data fetching, form validation |
+| **ShipmentForm.jsx** | 117 | Form for adding tracking numbers, refresh button, messaging |
+| **ShipmentCard.jsx** | 167 | Individual shipment row with expand/collapse, all table columns |
+| **EventTimeline.jsx** | 64 | Pure presentational component for tracking events table |
+| **DriftIndicator.jsx** | 250 | Delivery date drift indicators (separate file) |
+
+### Design Decisions
+
+- **State centralization**: All state lives in `App.jsx` for a single source of truth
+- **Prop-focused**: Components receive data and callbacks as props, no internal state
+- **Pure rendering**: `EventTimeline` is a pure presentational component
+- **Styling**: Tailwind CSS exclusively, no CSS files
+- **Responsive**: Mobile-first with `sm:`, `md:`, `lg:` breakpoints throughout
 
 ---
 
@@ -210,6 +267,23 @@ curl http://localhost:3000/track
 ```
 
 > **Note:** `WEBHOOK_VERIFY_DISABLED=true` is for local testing only — never set it in a deployment, or the webhook will accept unsigned (forged) requests.
+
+### Frontend Development
+
+The frontend uses Vite for fast dev rebuilds and HMR. Start the dev server:
+
+```bash
+cd frontend
+npm install          # first time only
+npm run dev          # starts on http://localhost:5173
+```
+
+Build for production:
+
+```bash
+npm run build        # compiles to dist/
+npm run preview      # test the build locally
+```
 
 ### Backend tests
 

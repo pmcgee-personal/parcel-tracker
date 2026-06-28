@@ -1,52 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { timeSince } from "./utils/timeUtils";
-import {
-  EstimatedDeliveryWithHistory,
-  DeliveredOnWithDrift,
-} from "./DriftIndicator";
-
-const getStatusStyle = (code) => {
-  switch (code) {
-    case "IT": // In Transit
-    case "AC": // Accepted
-      return "bg-cyan-900/40 text-cyan-400 border border-cyan-800/60";
-    case "OFD": // Out for Delivery
-      return "bg-amber-900/40 text-amber-400 border border-amber-800/60";
-    case "DE": // Delivered
-      return "bg-emerald-900/40 text-emerald-400 border border-emerald-800/60";
-    case "EX": // Exception
-      return "bg-rose-900/40 text-rose-400 border border-rose-800/60";
-    default: // Unknown, Not Yet in System, etc.
-      return "bg-slate-800 text-slate-300 border border-slate-700";
-  }
-};
-
-// --- NEW HELPER: Label Generated Date ---
-const getLabelGeneratedDate = (shipment) => {
-  const events = shipment.events || [];
-
-  // Search chronological events for label creation keywords
-  const labelEvent = events.find((event) => {
-    const desc = (event.description || "").toLowerCase();
-    return (
-      desc.includes("label created") ||
-      desc.includes("shipping label created") ||
-      desc.includes("shipper created a label") ||
-      desc.includes("label has been created") ||
-      desc.includes("billing information received") // Common FedEx equivalent
-    );
-  });
-
-  if (!labelEvent || !labelEvent.carrierOccurredAt) {
-    return null;
-  }
-
-  // Format it cleanly (e.g., "Jun 15")
-  return new Date(labelEvent.carrierOccurredAt).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-};
+import ShipmentForm from "./components/ShipmentForm";
+import ShipmentCard from "./components/ShipmentCard";
+import { getStatusStyle, getLabelGeneratedDate } from "./utils/shipmentHelpers";
 
 export default function App() {
   const [shipments, setShipments] = useState([]);
@@ -239,95 +194,24 @@ export default function App() {
         </header>
 
         {/* Control Panel */}
-        <div className="bg-slate-800/40 p-5 rounded-xl border border-slate-700 mb-8 shadow-lg backdrop-blur-sm">
-          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-end">
-            <form
-              onSubmit={handleAddShipment}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 flex-1"
-            >
-              <input
-                type="text"
-                placeholder="Tracking Number"
-                value={newTracking}
-                onChange={(e) => setNewTracking(e.target.value)}
-                required
-                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
-              />
-              <select
-                value={newCarrier}
-                onChange={(e) => setNewCarrier(e.target.value)}
-                required
-                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
-              >
-                <option value="" disabled>
-                  Select Carrier
-                </option>
-                <option value="fedex">FedEx</option>
-                <option value="ups">UPS</option>
-                <option value="stamps_com">USPS</option>
-              </select>
-              <input
-                type="text"
-                placeholder="Service Level"
-                value={newServiceLevel}
-                onChange={(e) => setNewServiceLevel(e.target.value)}
-                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
-              />
-              <input
-                type="text"
-                placeholder="Source"
-                value={newSource}
-                onChange={(e) => setNewSource(e.target.value)}
-                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
-              />
-              <select
-                value={newDirection}
-                onChange={(e) => setNewDirection(e.target.value)}
-                className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
-              >
-                <option value="Inbound">Inbound</option>
-                <option value="Outbound">Outbound</option>
-              </select>
-              <button
-                type="submit"
-                disabled={isSubmitting || !isFormValid}
-                className="sm:col-span-2 lg:col-auto bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md whitespace-nowrap"
-              >
-                {isSubmitting ? "Adding..." : "Add Shipment"}
-              </button>
-            </form>
-
-            <button
-              onClick={fetchShipments}
-              disabled={loading}
-              className="w-full lg:w-auto flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 px-4 py-2 rounded-lg text-sm font-semibold transition-colors border border-slate-600"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              Refresh Table
-            </button>
-          </div>
-
-          {actionMessage.text && (
-            <div
-              className={`mt-4 text-sm px-4 py-2 rounded-md ${actionMessage.type === "error" ? "bg-rose-900/30 text-rose-400 border border-rose-800" : "bg-emerald-900/30 text-emerald-400 border border-emerald-800"}`}
-            >
-              {actionMessage.text}
-            </div>
-          )}
-        </div>
+        <ShipmentForm
+          tracking={newTracking}
+          setTracking={setNewTracking}
+          carrier={newCarrier}
+          setCarrier={setNewCarrier}
+          direction={newDirection}
+          setDirection={setNewDirection}
+          serviceLevel={newServiceLevel}
+          setServiceLevel={setNewServiceLevel}
+          source={newSource}
+          setSource={setNewSource}
+          isSubmitting={isSubmitting}
+          isFormValid={isFormValid}
+          onSubmit={handleAddShipment}
+          loading={loading}
+          onRefresh={fetchShipments}
+          actionMessage={actionMessage}
+        />
 
         {/* Load/Error/Empty States */}
         {loading && shipments.length === 0 && (
@@ -421,224 +305,18 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/50 bg-transparent">
-                    {visibleShipments.map((shipment) => {
-                      const isExpanded = expandedShipments.has(
-                        shipment.trackingNumber,
-                      );
-                      const sortedEvents = [...(shipment.events || [])].sort(
-                        (a, b) =>
-                          new Date(b.carrierOccurredAt) -
-                          new Date(a.carrierOccurredAt),
-                      );
-
-                      return (
-                        <React.Fragment key={shipment.trackingNumber}>
-                          <tr
-                            className={`hover:bg-slate-700/30 transition-colors ${isExpanded ? "bg-slate-800/30" : ""}`}
-                          >
-                            {/* Expand Toggle */}
-                            <td className="px-4 py-4 whitespace-nowrap text-center text-sm font-medium">
-                              <button
-                                onClick={() =>
-                                  toggleRow(shipment.trackingNumber)
-                                }
-                                className="text-slate-400 hover:text-cyan-400 transition-colors focus:outline-none"
-                              >
-                                {isExpanded ? (
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-5 w-5"
-                                    viewBox="0 0 20 20"
-                                    fill="currentColor"
-                                  >
-                                    <path
-                                      fillRule="evenodd"
-                                      d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                                      clipRule="evenodd"
-                                    />
-                                  </svg>
-                                ) : (
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-5 w-5"
-                                    viewBox="0 0 20 20"
-                                    fill="currentColor"
-                                  >
-                                    <path
-                                      fillRule="evenodd"
-                                      d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-                                      clipRule="evenodd"
-                                    />
-                                  </svg>
-                                )}
-                              </button>
-                            </td>
-
-                            {/* Tracking Info */}
-                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                              <div className="text-xs sm:text-sm font-semibold text-white tracking-wide break-all sm:break-normal">
-                                {shipment.trackingNumber}
-                              </div>
-                              <div className="text-xs text-slate-500 uppercase mt-0.5 font-medium tracking-wider">
-                                {shipment.carrier}{" "}
-                                {shipment.serviceLevel && (
-                                  <span className="text-slate-400 normal-case italic text-[10px] sm:text-xs">
-                                    — {shipment.serviceLevel}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-
-                            {/* Direction */}
-                            <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap">
-                              <span
-                                className={`inline-flex items-center gap-x-2 px-2.5 py-1 rounded-full text-xs font-medium border ${shipment.direction === "Inbound" ? "bg-blue-900/30 text-blue-400 border-blue-800/50" : "bg-purple-900/30 text-purple-400 border-purple-800/50"}`}
-                              >
-                                {shipment.direction === "Inbound" ? (
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-4 w-4"
-                                    viewBox="0 0 20 20"
-                                    fill="currentColor"
-                                  >
-                                    <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-                                  </svg>
-                                ) : (
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-4 w-4"
-                                    viewBox="0 0 20 20"
-                                    fill="currentColor"
-                                  >
-                                    <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
-                                    <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v5.05a2.5 2.5 0 014.9 0H19a1 1 0 001-1V8a1 1 0 00-1-1h-5z" />
-                                  </svg>
-                                )}
-                                {shipment.direction}
-                              </span>
-                            </td>
-
-                            {/* Status */}
-                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                              <span
-                                className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wide ${getStatusStyle(shipment.statusCode)}`}
-                              >
-                                {shipment.statusDescription}
-                              </span>
-                            </td>
-
-                            {/* Label Gen. */}
-                            <td className="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                              {getLabelGeneratedDate(shipment) || "—"}
-                            </td>
-
-                            {/* Shipped On */}
-                            <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                              {shipment.shipDate
-                                ? new Date(
-                                    shipment.shipDate,
-                                  ).toLocaleDateString(undefined, {
-                                    month: "short",
-                                    day: "numeric",
-                                  })
-                                : "—"}
-                            </td>
-
-                            {/* Est Delivery (With Drift Component) */}
-                            <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                              <EstimatedDeliveryWithHistory
-                                shipment={shipment}
-                              />
-                            </td>
-
-                            {/* Delivered On (With Drift Component) */}
-                            <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                              <DeliveredOnWithDrift shipment={shipment} />
-                            </td>
-
-                            {/* Last Activity */}
-                            <td className="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-slate-400">
-                              {shipment.lastEventTimestamp
-                                ? timeSince(shipment.lastEventTimestamp)
-                                : "No events recorded"}
-                            </td>
-                          </tr>
-
-                          {/* Expanded History Row */}
-                          {isExpanded && (
-                            <tr className="bg-slate-900/60 border-t border-b border-slate-800/80">
-                              <td colSpan={9} className="px-8 py-5">
-                                <div className="border border-slate-700/60 rounded-xl overflow-hidden bg-slate-900 shadow-inner">
-                                  <div className="bg-slate-800/40 px-5 py-3 border-b border-slate-700/60 flex justify-between items-center">
-                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                      Tracking Events & Timeline
-                                    </h4>
-                                    <span className="text-xs text-slate-500 font-medium">
-                                      Total events: {sortedEvents.length}
-                                    </span>
-                                  </div>
-                                  {sortedEvents.length > 0 ? (
-                                    <table className="min-w-full divide-y divide-slate-800 text-sm">
-                                      <thead className="bg-slate-950/40">
-                                        <tr>
-                                          <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                                            Occurred At
-                                          </th>
-                                          <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                                            Description
-                                          </th>
-                                          <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                                            Location
-                                          </th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-slate-800 bg-transparent">
-                                        {sortedEvents.map((event, index) => {
-                                          // City/state when available; otherwise
-                                          // fall back to country (covers international
-                                          // events where city/state are null).
-                                          const location =
-                                            [
-                                              event.cityLocality,
-                                              event.stateProvince,
-                                            ]
-                                              .filter(Boolean)
-                                              .join(", ") ||
-                                            event.countryCode ||
-                                            "";
-                                          return (
-                                            <tr
-                                              key={index}
-                                              className="hover:bg-slate-800/20 transition-colors"
-                                            >
-                                              <td className="px-5 py-3 whitespace-nowrap text-slate-400 font-mono text-xs">
-                                                {new Date(
-                                                  event.carrierOccurredAt,
-                                                ).toLocaleString()}
-                                              </td>
-                                              <td className="px-5 py-3 text-slate-200 font-medium text-xs">
-                                                {event.description}
-                                              </td>
-                                              <td className="px-5 py-3 text-slate-400 text-xs italic">
-                                                {location || "In Transit"}
-                                              </td>
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  ) : (
-                                    <div className="p-6 text-center text-sm text-slate-500 italic">
-                                      No events recorded yet.
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
+                    {visibleShipments.map((shipment) => (
+                      <ShipmentCard
+                        key={shipment.trackingNumber}
+                        shipment={shipment}
+                        isExpanded={expandedShipments.has(
+                          shipment.trackingNumber
+                        )}
+                        onToggleExpand={toggleRow}
+                        getStatusStyle={getStatusStyle}
+                        getLabelGeneratedDate={getLabelGeneratedDate}
+                      />
+                    ))}
                   </tbody>
                 </table>
               </div>
