@@ -22,15 +22,15 @@ export const sortShipments = (shipments) => {
       return dateA - dateB;
     }
 
-    // Both delivered: sort by actual delivery date descending (newest first)
-    const dateA = a.actualDeliveryDate
-      ? new Date(a.actualDeliveryDate)
+    // Both delivered: sort by last event activity descending (most recent activity first)
+    const timeA = a.lastEventTimestamp
+      ? new Date(a.lastEventTimestamp)
       : null;
-    const dateB = b.actualDeliveryDate
-      ? new Date(b.actualDeliveryDate)
+    const timeB = b.lastEventTimestamp
+      ? new Date(b.lastEventTimestamp)
       : null;
-    if (!dateA) return 1;
-    if (!dateB) return -1;
-    return dateB - dateA;
+    if (!timeA) return 1;
+    if (!timeB) return -1;
+    return timeB - timeA;
   });
 };
