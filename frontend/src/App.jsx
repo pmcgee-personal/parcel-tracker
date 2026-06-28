@@ -380,9 +380,43 @@ export default function App() {
     fetchShipments();
   }, [fetchShipments]);
 
+  const validateForm = (tracking = newTracking, carrier = newCarrier) => {
+    const trimmedTracking = tracking.trim();
+    const trimmedCarrier = carrier.trim();
+
+    if (!trimmedTracking) {
+      return { valid: false, error: "Tracking number is required" };
+    }
+
+    if (trimmedTracking.length < 3) {
+      return { valid: false, error: "Tracking number must be at least 3 characters" };
+    }
+
+    if (!trimmedCarrier) {
+      return { valid: false, error: "Carrier selection is required" };
+    }
+
+    if (newServiceLevel.trim().length > 100) {
+      return { valid: false, error: "Service level is too long" };
+    }
+
+    if (newSource.trim().length > 100) {
+      return { valid: false, error: "Source is too long" };
+    }
+
+    return { valid: true };
+  };
+
+  const isFormValid = validateForm().valid;
+
   const handleAddShipment = async (e) => {
     e.preventDefault();
-    if (!newTracking || !newCarrier) return;
+
+    const validation = validateForm();
+    if (!validation.valid) {
+      setActionMessage({ type: "error", text: validation.error });
+      return;
+    }
 
     setIsSubmitting(true);
     setActionMessage({ type: "", text: "" });
@@ -502,8 +536,8 @@ export default function App() {
               </select>
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="sm:col-span-1 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md"
+                disabled={isSubmitting || !isFormValid}
+                className="sm:col-span-1 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md"
               >
                 {isSubmitting ? "Adding..." : "Add Shipment"}
               </button>
