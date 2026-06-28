@@ -313,8 +313,6 @@ export default function App() {
   const [expandedShipments, setExpandedShipments] = useState(new Set());
 
   const API_URL = import.meta.env.VITE_API_BASE_URL;
-  const TRACK_API_URL =
-    "https://zdecoujal6.execute-api.us-west-2.amazonaws.com/Prod/track";
   const API_KEY = import.meta.env.VITE_API_KEY;
 
   const toggleRow = (trackingNumber) => {
@@ -390,7 +388,7 @@ export default function App() {
     setActionMessage({ type: "", text: "" });
 
     try {
-      const response = await fetch(TRACK_API_URL, {
+      const response = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
         body: JSON.stringify({
