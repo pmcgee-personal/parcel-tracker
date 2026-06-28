@@ -62,6 +62,7 @@ export default function ShipmentCard({
                 ? "bg-blue-900/30 text-blue-400 border-blue-800/50"
                 : "bg-purple-900/30 text-purple-400 border-purple-800/50"
             }`}
+            aria-label={`Shipment direction: ${shipment.direction}`}
           >
             {shipment.direction === "Inbound" ? <HomeIcon /> : <TruckIcon />}
             {shipment.direction}
@@ -74,6 +75,7 @@ export default function ShipmentCard({
             className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-md text-[10px] sm:text-xs font-bold uppercase tracking-wide ${getStatusStyle(
               shipment.statusCode
             )}`}
+            aria-label={`Status: ${shipment.statusDescription}`}
           >
             {shipment.statusDescription}
           </span>

@@ -33,12 +33,16 @@ export default function ShipmentForm({
             value={tracking}
             onChange={(e) => setTracking(e.target.value)}
             required
+            aria-label="Tracking number (required)"
+            aria-required="true"
             className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
           />
           <select
             value={carrier}
             onChange={(e) => setCarrier(e.target.value)}
             required
+            aria-label="Carrier selection (required)"
+            aria-required="true"
             className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
           >
             <option value="" disabled>
@@ -53,6 +57,7 @@ export default function ShipmentForm({
             placeholder="Service Level"
             value={serviceLevel}
             onChange={(e) => setServiceLevel(e.target.value)}
+            aria-label="Service level (optional)"
             className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
           />
           <input
@@ -60,11 +65,13 @@ export default function ShipmentForm({
             placeholder="Source"
             value={source}
             onChange={(e) => setSource(e.target.value)}
+            aria-label="Source (optional)"
             className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
           />
           <select
             value={direction}
             onChange={(e) => setDirection(e.target.value)}
+            aria-label="Shipment direction"
             className="bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
           >
             <option value="Inbound">Inbound</option>
@@ -73,6 +80,7 @@ export default function ShipmentForm({
           <button
             type="submit"
             disabled={isSubmitting || !isFormValid}
+            aria-label="Add tracking number"
             className="sm:col-span-2 lg:col-auto bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md whitespace-nowrap"
           >
             {isSubmitting ? "Adding..." : "Add Shipment"}
