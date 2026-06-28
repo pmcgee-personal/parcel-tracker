@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import PropTypes from "prop-types";
 
 export default function EventTimeline({ events }) {
+  const [sortAsc, setSortAsc] = useState(false);
   return (
     <div className="border border-slate-700/60 rounded-xl overflow-hidden bg-slate-900 shadow-inner">
       <div className="bg-slate-800/40 px-5 py-3 border-b border-slate-700/60 flex justify-between items-center">
@@ -17,7 +18,16 @@ export default function EventTimeline({ events }) {
           <thead className="bg-slate-950/40">
             <tr>
               <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Occurred At
+                <button
+                  onClick={() => setSortAsc(!sortAsc)}
+                  className="flex items-center gap-2 hover:text-slate-300 transition-colors"
+                  title={sortAsc ? "Sort newest first" : "Sort oldest first"}
+                >
+                  Occurred At
+                  <span className="text-[10px] ml-1">
+                    {sortAsc ? "↑ Oldest" : "↓ Newest"}
+                  </span>
+                </button>
               </th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 Description
@@ -28,7 +38,13 @@ export default function EventTimeline({ events }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800 bg-transparent">
-            {events.map((event, index) => {
+            {[...events]
+              .sort((a, b) =>
+                sortAsc
+                  ? new Date(a.carrierOccurredAt) - new Date(b.carrierOccurredAt)
+                  : new Date(b.carrierOccurredAt) - new Date(a.carrierOccurredAt)
+              )
+              .map((event, index) => {
               const location =
                 [event.cityLocality, event.stateProvince]
                   .filter(Boolean)
