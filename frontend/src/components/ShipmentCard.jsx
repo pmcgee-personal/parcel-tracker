@@ -6,6 +6,7 @@ import {
   DeliveredOnWithDrift,
 } from "../DriftIndicator";
 import EventTimeline from "./EventTimeline";
+import { ChevronDownIcon, ChevronRightIcon, HomeIcon, TruckIcon } from "./icons";
 
 export default function ShipmentCard({
   shipment,
@@ -31,34 +32,10 @@ export default function ShipmentCard({
           <button
             onClick={() => onToggleExpand(shipment.trackingNumber)}
             className="text-slate-400 hover:text-cyan-400 transition-colors focus:outline-none"
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? "Collapse shipment details" : "Expand shipment details"}
           >
-            {isExpanded ? (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            ) : (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            )}
+            {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
           </button>
         </td>
 
@@ -86,26 +63,7 @@ export default function ShipmentCard({
                 : "bg-purple-900/30 text-purple-400 border-purple-800/50"
             }`}
           >
-            {shipment.direction === "Inbound" ? (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-              </svg>
-            ) : (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
-                <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v5.05a2.5 2.5 0 014.9 0H19a1 1 0 001-1V8a1 1 0 00-1-1h-5z" />
-              </svg>
-            )}
+            {shipment.direction === "Inbound" ? <HomeIcon /> : <TruckIcon />}
             {shipment.direction}
           </span>
         </td>
