@@ -60,6 +60,9 @@ jobs:
           API_KEY_ID=$(aws cloudformation describe-stacks --stack-name parcel-tracker-stack --query "Stacks[0].Outputs[?OutputKey=='ApiKeyId'].OutputValue" --output text)
           API_KEY=$(aws apigateway get-api-key --api-key "$API_KEY_ID" --include-value --query value --output text)
 
+          # Mask the API key in GitHub Actions logs
+          echo "::add-mask::$API_KEY"
+
           # 2. Install dependencies and build React (passing the API URL + key dynamically)
           npm ci
           VITE_API_BASE_URL=$API_URL VITE_API_KEY=$API_KEY npm run build
