@@ -81,6 +81,11 @@ export default function ShipmentCard({
           </span>
         </td>
 
+        {/* Est Delivery (Mobile + Desktop, With Drift Component) */}
+        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+          <EstimatedDeliveryWithHistory shipment={shipment} />
+        </td>
+
         {/* Label Gen. */}
         <td className="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-slate-300">
           {getLabelGeneratedDate(shipment) || "—"}
@@ -94,11 +99,6 @@ export default function ShipmentCard({
                 day: "numeric",
               })
             : "—"}
-        </td>
-
-        {/* Est Delivery (With Drift Component) */}
-        <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-          <EstimatedDeliveryWithHistory shipment={shipment} />
         </td>
 
         {/* Delivered On (With Drift Component) */}
