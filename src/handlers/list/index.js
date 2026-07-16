@@ -37,7 +37,13 @@ async function scanAll(docClient, params) {
 async function scanWithPagination(docClient, params, limit, nextToken) {
   const scanParams = { ...params, Limit: limit };
   if (nextToken) {
-    scanParams.ExclusiveStartKey = JSON.parse(Buffer.from(nextToken, "base64").toString());
+    try {
+      const decodedToken = decodeURIComponent(nextToken);
+      const jsonString = Buffer.from(decodedToken, "base64").toString("utf8");
+      scanParams.ExclusiveStartKey = JSON.parse(jsonString);
+    } catch (err) {
+      throw new Error(`Invalid pagination token: ${err.message}`);
+    }
   }
 
   const command = new ScanCommand(scanParams);
