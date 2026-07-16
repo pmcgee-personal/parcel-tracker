@@ -283,14 +283,9 @@ export default function App() {
         )}
 
         {/* Main Table */}
-        {!error && shipments.length > 0 && (
+        {!error && shipments.length > 0 && !loading && (
           <>
             <div className="bg-slate-800/40 rounded-xl shadow-2xl border border-slate-700 overflow-hidden backdrop-blur-sm relative">
-              {loading && (
-                <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm z-10 flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-500"></div>
-                </div>
-              )}
               <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <table className="min-w-full divide-y divide-slate-700/50 text-sm sm:text-base">
                   <thead className="bg-slate-900/50">
