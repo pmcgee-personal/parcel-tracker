@@ -30,6 +30,7 @@ export default function App() {
   // Pagination state
   const [nextToken, setNextToken] = useState(null);
   const [hasMore, setHasMore] = useState(false);
+  const [alreadyAutoLoaded, setAlreadyAutoLoaded] = useState(false);
 
   const API_URL = import.meta.env.VITE_API_BASE_URL;
   const API_KEY = import.meta.env.VITE_API_KEY;
@@ -201,6 +202,21 @@ export default function App() {
 
   const hasHiddenShipments = shipments.length > visibleShipments.length;
 
+  // Auto-load next batch if initial load shows data but nothing passes filter
+  useEffect(() => {
+    if (
+      !loading &&
+      shipments.length > 0 &&
+      visibleShipments.length === 0 &&
+      hasMore &&
+      !alreadyAutoLoaded
+    ) {
+      console.log("Auto-loading next batch: initial data filtered out");
+      setAlreadyAutoLoaded(true);
+      fetchShipments(nextToken, true);
+    }
+  }, [loading, shipments.length, visibleShipments.length, hasMore, alreadyAutoLoaded, nextToken, fetchShipments]);
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 py-12 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-7xl mx-auto">
@@ -243,6 +259,15 @@ export default function App() {
         {error && (
           <div className="bg-rose-900/20 border-l-4 border-rose-500 p-4 rounded-md mb-8">
             <p className="text-sm text-rose-400">{error}</p>
+          </div>
+        )}
+
+        {alreadyAutoLoaded && shipments.length > 0 && visibleShipments.length === 0 && (
+          <div className="flex justify-center items-center py-20">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-500 mx-auto mb-4"></div>
+              <p className="text-sm text-slate-400">Searching for active shipments...</p>
+            </div>
           </div>
         )}
 
