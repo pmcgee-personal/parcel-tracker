@@ -294,6 +294,12 @@ export default function App() {
                       </th>
                       <th
                         scope="col"
+                        className="px-3 sm:px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                      >
+                        Est. Delivery
+                      </th>
+                      <th
+                        scope="col"
                         className="hidden lg:table-cell px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                       >
                         Label Gen.
@@ -303,12 +309,6 @@ export default function App() {
                         className="hidden md:table-cell px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
                       >
                         Shipped On
-                      </th>
-                      <th
-                        scope="col"
-                        className="hidden sm:table-cell px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider"
-                      >
-                        Est. Delivery
                       </th>
                       <th
                         scope="col"
