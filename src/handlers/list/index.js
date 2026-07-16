@@ -128,9 +128,9 @@ exports.handler = async (event) => {
     if (nextToken && !statusFilter) {
       try {
         customTokenData = JSON.parse(Buffer.from(nextToken, "base64").toString());
-        // If it's a custom token with originalScanToken, extract the actual scan token
-        if (customTokenData.filterApplied && customTokenData.originalScanToken) {
-          nextToken = customTokenData.originalScanToken;
+        // If it's a custom token with filterApplied, extract the actual scan token (may be null)
+        if (customTokenData.filterApplied) {
+          nextToken = customTokenData.originalScanToken || null;
         }
       } catch {
         // Not a custom token, use as-is
@@ -214,9 +214,9 @@ exports.handler = async (event) => {
       // Return only first `limit` items from filtered set
       finalShipments = sortedImportant.slice(0, limit);
 
-      // Determine next token: if more filtered items exist, use cursor in filtered set
+      // Determine next token: only set if we have more filtered items OR can continue scanning
       if (sortedImportant.length > limit) {
-        // Encode pagination: which index in the filtered set we should start from next
+        // More filtered items exist in current result set
         responseNextToken = Buffer.from(
           JSON.stringify({
             filteredStartIndex: limit,
@@ -224,8 +224,8 @@ exports.handler = async (event) => {
             filterApplied: true,
           }),
         ).toString("base64");
-      } else if (scanNextToken || shipmentItems.length === scanLimit) {
-        // More raw items exist to scan (either explicit scanNextToken OR we got full scanLimit items)
+      } else if (scanNextToken) {
+        // Can continue scanning for more raw items
         responseNextToken = Buffer.from(
           JSON.stringify({
             filteredStartIndex: 0,
@@ -234,6 +234,7 @@ exports.handler = async (event) => {
           }),
         ).toString("base64");
       } else {
+        // No more items to scan and all filtered items shown
         responseNextToken = null;
       }
 
@@ -241,11 +242,11 @@ exports.handler = async (event) => {
         `[${requestId}] Filtered to ${filteredTotal} important items, returning ${finalShipments.length}`,
       );
     } else if (!isFirstPage && !statusFilter && customTokenData) {
-      // On subsequent pages with custom token: continue raw scan, then sort (don't filter)
-      // This allows "Load More" to show older/non-important items
+      // On subsequent pages with custom token: return unfiltered items (sorted by priority)
+      // This shows older/non-important shipments to the user
       finalShipments = sortShipmentsByPriority(shipmentsWithEvents);
 
-      // Set next token for further pagination
+      // Set next token for further pagination if there are more items
       if (scanNextToken) {
         responseNextToken = Buffer.from(
           JSON.stringify({
@@ -258,7 +259,7 @@ exports.handler = async (event) => {
       }
 
       console.log(
-        `[${requestId}] Continuing filtered pagination, returning ${finalShipments.length} items`,
+        `[${requestId}] Page ${customTokenData.loadUnfiltered ? '(unfiltered)' : ''} returning ${finalShipments.length} items`,
       );
     } else {
       // statusFilter provided, or other cases: use standard sorting
@@ -267,13 +268,6 @@ exports.handler = async (event) => {
     }
 
     console.log(`[${requestId}] Successfully fetched and formatted data`);
-
-    // On first page: hasMore is true if there are more raw items than filtered items being returned
-    // This allows users to "Load More" to browse older/non-important items
-    let hasMoreValue = !!responseNextToken;
-    if (isFirstPage && !statusFilter) {
-      hasMoreValue = hasMoreValue || filteredTotal < shipmentItems.length;
-    }
 
     return {
       statusCode: 200,
@@ -287,7 +281,7 @@ exports.handler = async (event) => {
         pagination: {
           limit,
           nextToken: responseNextToken,
-          hasMore: hasMoreValue,
+          hasMore: !!responseNextToken,
           ...(isFirstPage && { filteredTotal, rawTotal: shipmentItems.length }),
         },
       }),
