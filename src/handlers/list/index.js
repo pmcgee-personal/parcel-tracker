@@ -248,6 +248,13 @@ exports.handler = async (event) => {
 
     console.log(`[${requestId}] Successfully fetched and formatted data`);
 
+    // On first page: hasMore is true if there are more raw items than filtered items being returned
+    // This allows users to "Load More" to browse older/non-important items
+    let hasMoreValue = !!responseNextToken;
+    if (isFirstPage && !statusFilter) {
+      hasMoreValue = hasMoreValue || filteredTotal < shipmentItems.length;
+    }
+
     return {
       statusCode: 200,
       headers: {
@@ -260,7 +267,7 @@ exports.handler = async (event) => {
         pagination: {
           limit,
           nextToken: responseNextToken,
-          hasMore: !!responseNextToken,
+          hasMore: hasMoreValue,
           ...(isFirstPage && { filteredTotal, rawTotal: shipmentItems.length }),
         },
       }),
