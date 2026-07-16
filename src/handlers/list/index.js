@@ -209,8 +209,8 @@ exports.handler = async (event) => {
             filterApplied: true,
           }),
         ).toString("base64");
-      } else if (scanNextToken) {
-        // All filtered items fit in one page, but more raw items exist to scan
+      } else if (scanNextToken || shipmentItems.length === scanLimit) {
+        // More raw items exist to scan (either explicit scanNextToken OR we got full scanLimit items)
         responseNextToken = Buffer.from(
           JSON.stringify({
             filteredStartIndex: 0,
