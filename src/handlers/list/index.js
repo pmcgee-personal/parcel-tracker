@@ -119,9 +119,24 @@ exports.handler = async (event) => {
     // Parse query parameters
     const queryParams = event.queryStringParameters || {};
     const limit = Math.min(parseInt(queryParams.limit) || 50, 100); // Max 100, default 50
-    const nextToken = queryParams.nextToken || null;
+    let nextToken = queryParams.nextToken || null;
     const statusFilter = queryParams.status || null; // Optional: filter by status
     const isFirstPage = !nextToken;
+
+    // Decode custom pagination token if present
+    let customTokenData = null;
+    if (nextToken && !statusFilter) {
+      try {
+        customTokenData = JSON.parse(Buffer.from(nextToken, "base64").toString());
+        // If it's a custom token with originalScanToken, extract the actual scan token
+        if (customTokenData.filterApplied && customTokenData.originalScanToken) {
+          nextToken = customTokenData.originalScanToken;
+        }
+      } catch {
+        // Not a custom token, use as-is
+        customTokenData = null;
+      }
+    }
 
     console.log(
       `[${requestId}] Fetching shipments (limit: ${limit}, status: ${statusFilter || "all"}, firstPage: ${isFirstPage})`,
@@ -225,21 +240,26 @@ exports.handler = async (event) => {
       console.log(
         `[${requestId}] Filtered to ${filteredTotal} important items, returning ${finalShipments.length}`,
       );
-    } else if (!isFirstPage && !statusFilter) {
-      // On subsequent pages with filter active: decode token and continue
-      try {
-        const tokenData = JSON.parse(Buffer.from(nextToken, "base64").toString());
-        if (tokenData.filterApplied) {
-          // Continue fetching from raw scan, filter, and re-paginate
-          // For now, fall back to unfiltered pagination (can be optimized later)
-          finalShipments = sortShipmentsByPriority(shipmentsWithEvents);
-          responseNextToken = scanNextToken;
-        }
-      } catch {
-        // If token decode fails, fall back to unfiltered
-        finalShipments = sortShipmentsByPriority(shipmentsWithEvents);
-        responseNextToken = scanNextToken;
+    } else if (!isFirstPage && !statusFilter && customTokenData) {
+      // On subsequent pages with custom token: continue raw scan, then sort (don't filter)
+      // This allows "Load More" to show older/non-important items
+      finalShipments = sortShipmentsByPriority(shipmentsWithEvents);
+
+      // Set next token for further pagination
+      if (scanNextToken) {
+        responseNextToken = Buffer.from(
+          JSON.stringify({
+            originalScanToken: scanNextToken,
+            filterApplied: true,
+          }),
+        ).toString("base64");
+      } else {
+        responseNextToken = null;
       }
+
+      console.log(
+        `[${requestId}] Continuing filtered pagination, returning ${finalShipments.length} items`,
+      );
     } else {
       // statusFilter provided, or other cases: use standard sorting
       finalShipments = sortShipmentsByPriority(shipmentsWithEvents);
