@@ -223,6 +223,10 @@ exports.handler = async (event) => {
     const carrier = shipment.carrier || "unknown";
     const stopTrackingUrl = `https://api.shipengine.com/v1/tracking/stop?carrier_code=${encodeURIComponent(carrier)}&tracking_number=${encodeURIComponent(trackingNumber)}`;
 
+    console.log(
+      `[${requestId}] ShipEngine request - URL: ${stopTrackingUrl}, Carrier: ${carrier}, Tracking: ${trackingNumber}`,
+    );
+
     let shipEngineError = null;
     try {
       const stopResponse = await fetchWithRetry(stopTrackingUrl, {
@@ -230,8 +234,19 @@ exports.handler = async (event) => {
         headers: { "API-Key": apiKey, "Content-Type": "application/json" },
       });
 
+      let responseBody = "";
+      try {
+        responseBody = await stopResponse.clone().text();
+      } catch {
+        responseBody = "[unable to read response body]";
+      }
+
+      console.log(
+        `[${requestId}] ShipEngine response - Status: ${stopResponse.status}, Body: ${responseBody}`,
+      );
+
       if (!stopResponse.ok) {
-        shipEngineError = `ShipEngine returned ${stopResponse.status}`;
+        shipEngineError = `ShipEngine returned ${stopResponse.status}: ${responseBody}`;
         console.warn(
           `[${requestId}] ShipEngine stop tracking failed: ${shipEngineError}`,
         );
@@ -248,7 +263,7 @@ exports.handler = async (event) => {
     } catch (error) {
       shipEngineError = error.message;
       console.error(
-        `[${requestId}] Error calling ShipEngine stop tracking:`,
+        `[${requestId}] Error calling ShipEngine stop tracking: ${error.message}`,
         error,
       );
 
