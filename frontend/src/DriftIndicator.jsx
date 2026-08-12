@@ -149,34 +149,6 @@ export const EstimatedDeliveryWithHistory = ({ shipment }) => {
 export const DeliveredOnWithDrift = ({ shipment }) => {
   const [showTooltip, setShowTooltip] = useState(false);
 
-  // Check if shipment is stale (no updates in 48+ hours)
-  const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
-  const isStale =
-    shipment.lastEventTimestamp &&
-    // eslint-disable-next-line react-hooks/purity
-    Date.now() - new Date(shipment.lastEventTimestamp).getTime() >
-      STALE_THRESHOLD_MS;
-
-  if (isStale) {
-    return (
-      <div className="flex items-center gap-1.5">
-        <span className="text-red-400 font-medium">No recent updates</span>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          className="w-4 h-4 text-red-400"
-        >
-          <path
-            fillRule="evenodd"
-            d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-9-3a1 1 0 1 0-2 0v5a1 1 0 1 0 2 0V7Zm0 8a1 1 0 1 0-2 0v1a1 1 0 1 0 2 0v-1Z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </div>
-    );
-  }
-
   if (!shipment.actualDeliveryDate) {
     return <span className="text-slate-500">—</span>;
   }

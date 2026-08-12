@@ -34,9 +34,16 @@ async function monitorStaleness() {
     const staleShipments = [];
 
     // Find stale shipments that haven't been notified recently
+    const activeStatuses = ["accepted", "in transit", "exception"];
     for (const shipment of shipments) {
       if (!shipment.lastEventTimestamp) {
         continue; // Skip if no event timestamp
+      }
+
+      // Only notify for active shipments (not delivered, cancelled, etc.)
+      const status = (shipment.statusDescription || "").toLowerCase();
+      if (!activeStatuses.some((s) => status.includes(s))) {
+        continue;
       }
 
       const lastEventTime = new Date(
@@ -78,14 +85,8 @@ async function monitorStaleness() {
     // Send ntfy notification
     console.log(`Found ${staleShipments.length} stale shipments to notify`);
 
-    const shipmentList = staleShipments
-      .map(
-        (s) =>
-          `• ${s.trackingNumber} (${s.carrier}) - ${s.hoursWithoutUpdate} hours without update`,
-      )
-      .join("\n");
-
-    const message = `⚠️ Parcel Tracker: ${staleShipments.length} shipment(s) have not been updated in 48+ hours:\n\n${shipmentList}`;
+    const trackingNumbers = staleShipments.map((s) => s.trackingNumber);
+    const message = `${staleShipments.length} shipment(s) without updates: ${trackingNumbers.join(", ")}`;
 
     await sendNtfyNotification(message);
 

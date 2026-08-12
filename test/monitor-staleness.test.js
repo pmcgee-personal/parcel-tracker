@@ -86,6 +86,12 @@ test("Monitor staleness - finds stale shipments and sends notification", async (
       statusDescription: "In Transit",
       lastEventTimestamp: recentTime,
     },
+    {
+      trackingNumber: "DELIVERED001",
+      carrier: "ups",
+      statusDescription: "Delivered",
+      lastEventTimestamp: fortyEightHoursAgo,
+    },
   ];
 
   let updateCount = 0;
@@ -111,11 +117,14 @@ test("Monitor staleness - finds stale shipments and sends notification", async (
   assert.equal(body.staleShipments[0].trackingNumber, "STALE001");
   assert.equal(body.staleShipments[1].trackingNumber, "STALE002");
 
-  // Verify ntfy notification was sent
+  // Verify ntfy notification was sent with tracking numbers
   assert.equal(mockFetchCalls.length, 1);
   assert(mockFetchCalls[0].url.includes("ntfy.sh"));
+  assert(mockFetchCalls[0].options.body.includes("STALE001"));
+  assert(mockFetchCalls[0].options.body.includes("STALE002"));
+  assert(!mockFetchCalls[0].options.body.includes("DELIVERED001")); // Delivered shipments excluded
 
-  // Verify updates were made
+  // Verify updates were made only for active shipments
   assert.equal(updateCount, 2);
 });
 
@@ -215,4 +224,76 @@ test("Monitor staleness - skips shipments with no timestamp", async () => {
 
   // Verify no notification was sent
   assert.equal(mockFetchCalls.length, 0);
+});
+
+test("Monitor staleness - filters by active status only", async () => {
+  const now = Date.now();
+  const fortyEightHoursAgo = new Date(now - 48.5 * 60 * 60 * 1000).toISOString();
+
+  const shipments = [
+    {
+      trackingNumber: "STALE_IN_TRANSIT",
+      carrier: "ups",
+      statusDescription: "In Transit",
+      lastEventTimestamp: fortyEightHoursAgo,
+    },
+    {
+      trackingNumber: "STALE_ACCEPTED",
+      carrier: "ups",
+      statusDescription: "Accepted",
+      lastEventTimestamp: fortyEightHoursAgo,
+    },
+    {
+      trackingNumber: "STALE_EXCEPTION",
+      carrier: "ups",
+      statusDescription: "Exception",
+      lastEventTimestamp: fortyEightHoursAgo,
+    },
+    {
+      trackingNumber: "STALE_DELIVERED",
+      carrier: "ups",
+      statusDescription: "Delivered",
+      lastEventTimestamp: fortyEightHoursAgo,
+    },
+    {
+      trackingNumber: "STALE_CANCELLED",
+      carrier: "ups",
+      statusDescription: "Cancelled",
+      lastEventTimestamp: fortyEightHoursAgo,
+    },
+  ];
+
+  mockDocClientSend = async (command) => {
+    if (command.constructor.name === "ScanCommand") {
+      return { Items: shipments };
+    }
+    if (command.constructor.name === "UpdateCommand") {
+      return {};
+    }
+    return {};
+  };
+
+  mockFetchCalls = [];
+
+  const response = await handler({});
+
+  assert.equal(response.statusCode, 200);
+
+  const body = JSON.parse(response.body);
+  // Only 3 active statuses should be notified (in transit, accepted, exception)
+  assert.equal(body.staleShipments.length, 3);
+
+  const trackingNumbers = body.staleShipments.map((s) => s.trackingNumber);
+  assert(trackingNumbers.includes("STALE_IN_TRANSIT"));
+  assert(trackingNumbers.includes("STALE_ACCEPTED"));
+  assert(trackingNumbers.includes("STALE_EXCEPTION"));
+  assert(!trackingNumbers.includes("STALE_DELIVERED"));
+  assert(!trackingNumbers.includes("STALE_CANCELLED"));
+
+  // Verify notification contains only active shipments
+  assert.equal(mockFetchCalls.length, 1);
+  const notificationBody = mockFetchCalls[0].options.body;
+  assert(notificationBody.includes("STALE_IN_TRANSIT"));
+  assert(!notificationBody.includes("STALE_DELIVERED"));
+  assert(!notificationBody.includes("STALE_CANCELLED"));
 });

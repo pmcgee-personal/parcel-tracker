@@ -9,7 +9,6 @@ import EventTimeline from "./EventTimeline";
 import { ChevronDownIcon, ChevronRightIcon, HomeIcon, TruckIcon } from "./icons";
 
 const DELETABLE_STATUSES = new Set(["NY", "AC", "IT"]);
-const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
 
 export default function ShipmentCard({
   shipment,
@@ -23,12 +22,6 @@ export default function ShipmentCard({
     (a, b) =>
       new Date(b.carrierOccurredAt) - new Date(a.carrierOccurredAt)
   );
-
-  const isStale =
-    shipment.lastEventTimestamp &&
-    // eslint-disable-next-line react-hooks/purity
-    Date.now() - new Date(shipment.lastEventTimestamp).getTime() >
-      STALE_THRESHOLD_MS;
 
   return (
     <React.Fragment key={shipment.trackingNumber}>
@@ -51,28 +44,18 @@ export default function ShipmentCard({
 
         {/* Tracking Info */}
         <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-          <div className="flex items-center gap-2">
-            <div>
-              <div className="text-xs sm:text-sm font-semibold text-white tracking-wide break-all sm:break-normal">
-                {shipment.trackingNumber}
-              </div>
-              <div className="text-xs text-slate-500 uppercase mt-0.5 font-medium tracking-wider">
-                {shipment.carrier}{" "}
-                {shipment.serviceLevel && (
-                  <span className="text-slate-400 normal-case italic text-[10px] sm:text-xs">
-                    — {shipment.serviceLevel}
-                  </span>
-                )}
-              </div>
+          <div>
+            <div className="text-xs sm:text-sm font-semibold text-white tracking-wide break-all sm:break-normal">
+              {shipment.trackingNumber}
             </div>
-            {isStale && (
-              <div
-                className="bg-red-900/40 border border-red-700/50 rounded px-2 py-1 text-xs font-bold text-red-400 whitespace-nowrap"
-                title="No updates in 48+ hours"
-              >
-                ⚠️ STALE
-              </div>
-            )}
+            <div className="text-xs text-slate-500 uppercase mt-0.5 font-medium tracking-wider">
+              {shipment.carrier}{" "}
+              {shipment.serviceLevel && (
+                <span className="text-slate-400 normal-case italic text-[10px] sm:text-xs">
+                  — {shipment.serviceLevel}
+                </span>
+              )}
+            </div>
           </div>
         </td>
 
