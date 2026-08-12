@@ -235,7 +235,7 @@ exports.handler = async (event) => {
 
     // 2. Build the base Update parameters
     let updateExpression =
-      "SET statusCode = :sc, carrierDetailCode = :cdc, statusDescription = :sd, carrierStatusCode = :csc, carrierStatusDescription = :csd, shipDate = :sdDate, estimatedDeliveryDate = :edd, actualDeliveryDate = :ad, exceptionDescription = :ed, updatedAt = :u, lastEventTimestamp = :let";
+      "SET statusCode = :sc, carrierDetailCode = :cdc, statusDescription = :sd, carrierStatusCode = :csc, carrierStatusDescription = :csd, shipDate = :sdDate, estimatedDeliveryDate = :edd, actualDeliveryDate = :ad, exceptionDescription = :ed, updatedAt = :u, lastEventTimestamp = :let, lastStaleNotificationAt = :null";
 
     let expressionAttributeValues = {
       ":sc": data.status_code || "UNKNOWN",
@@ -251,6 +251,7 @@ exports.handler = async (event) => {
       ":let": latestEvent
         ? latestEvent.occurred_at
         : data.last_event?.occurred_at || null,
+      ":null": null,
     };
 
     // If it is Out For Delivery, determine if we should notify, and update the DB flag if we do

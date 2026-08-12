@@ -187,6 +187,30 @@ Resources:
             Auth:
               ApiKeyRequired: true
 
+  # Lambda function to monitor for stale shipments (no updates in 48+ hours)
+  MonitorStalenessFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers/monitor-staleness/index.handler
+      Runtime: nodejs22.x
+      Timeout: 60
+      Environment:
+        Variables:
+          SHIPMENTS_TABLE: !Ref ShipmentsTable
+          NTFY_URL: !Ref NtfyUrl
+      Policies:
+        # Permission to scan and update Shipments table
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ShipmentsTable
+      Events:
+        StalnessCheck:
+          Type: Schedule
+          Properties:
+            Schedule: "cron(0 */6 * * ? *)" # Every 6 hours
+            Name: ParcelTrackerStalenessMonitor
+            Description: Monitor for shipments with no updates in 48+ hours
+
   # --- FRONTEND HOSTING RESOURCES ---
   FrontendBucket:
     Type: AWS::S3::Bucket
