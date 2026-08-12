@@ -102,6 +102,10 @@ jobs:
 
           echo "Testing frontend at $CF_URL"
           echo "Testing API at $API_URL"
+          if [ -z "$API_KEY" ]; then
+            echo "❌ Failed to retrieve API key"
+            exit 1
+          fi
 
           # Test 1: Frontend loads (expect 200)
           FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$CF_URL/")
@@ -112,9 +116,13 @@ jobs:
           echo "✅ Frontend is responding"
 
           # Test 2: API responds with API key (expect 200)
-          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/track" -H "x-api-key: $API_KEY")
+          API_RESPONSE=$(curl -s -w "\n%{http_code}" "$API_URL/track" -H "x-api-key: $API_KEY")
+          API_STATUS=$(echo "$API_RESPONSE" | tail -n 1)
+          API_BODY=$(echo "$API_RESPONSE" | head -n -1)
+
           if [ "$API_STATUS" != "200" ]; then
             echo "❌ API health check failed: HTTP $API_STATUS"
+            echo "Response body: $API_BODY"
             exit 1
           fi
           echo "✅ API is responding"
