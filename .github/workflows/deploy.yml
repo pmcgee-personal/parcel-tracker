@@ -21,6 +21,18 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "22" # Match the Lambda runtime (nodejs22.x)
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Cache SAM build artifacts
+        uses: actions/cache@v4
+        with:
+          path: .aws-sam/build
+          key: ${{ runner.os }}-sam-${{ hashFiles('template.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-sam-
 
       - name: Run backend tests
         run: node --test # Gate the deploy on the src/lib unit tests
@@ -47,6 +59,12 @@ jobs:
           --no-fail-on-empty-changeset 
           --parameter-overrides NtfyUrl="${{ secrets.NTFY_URL }}"
 
+      - name: Lint Frontend
+        working-directory: ./frontend
+        run: |
+          npm ci
+          npm run lint
+
       - name: Build and Deploy Frontend
         working-directory: ./frontend
         run: |
@@ -63,10 +81,42 @@ jobs:
           # Mask the API key in GitHub Actions logs
           echo "::add-mask::$API_KEY"
 
-          # 2. Install dependencies and build React (passing the API URL + key dynamically)
-          npm ci
+          # 2. Build React (dependencies already installed by lint step)
           VITE_API_BASE_URL=$API_URL VITE_API_KEY=$API_KEY npm run build
 
           # 3. Sync the built website to S3 and invalidate the CloudFront cache
           aws s3 sync dist/ s3://$BUCKET_NAME --delete
           aws cloudfront create-invalidation --distribution-id $DIST_ID --paths "/*"
+
+      - name: Smoke Test Deployment
+        run: |
+          # Get CloudFront URL from stack outputs
+          CF_URL=$(aws cloudformation describe-stacks --stack-name parcel-tracker-stack --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDomainName'].OutputValue" --output text)
+
+          # Get API URL from stack outputs
+          API_URL=$(aws cloudformation describe-stacks --stack-name parcel-tracker-stack --query "Stacks[0].Outputs[?OutputKey=='ListApiUrl'].OutputValue" --output text)
+
+          # Fetch API key
+          API_KEY_ID=$(aws cloudformation describe-stacks --stack-name parcel-tracker-stack --query "Stacks[0].Outputs[?OutputKey=='ApiKeyId'].OutputValue" --output text)
+          API_KEY=$(aws apigateway get-api-key --api-key "$API_KEY_ID" --include-value --query value --output text)
+
+          echo "Testing frontend at $CF_URL"
+          echo "Testing API at $API_URL"
+
+          # Test 1: Frontend loads (expect 200)
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$CF_URL/")
+          if [ "$FRONTEND_STATUS" != "200" ]; then
+            echo "❌ Frontend health check failed: HTTP $FRONTEND_STATUS"
+            exit 1
+          fi
+          echo "✅ Frontend is responding"
+
+          # Test 2: API responds with API key (expect 200)
+          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/track" -H "x-api-key: $API_KEY")
+          if [ "$API_STATUS" != "200" ]; then
+            echo "❌ API health check failed: HTTP $API_STATUS"
+            exit 1
+          fi
+          echo "✅ API is responding"
+
+          echo "✅ Deployment smoke tests passed"
