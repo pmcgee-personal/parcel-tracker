@@ -197,7 +197,7 @@ export default function App() {
 
     try {
       const response = await fetch(
-        `${API_URL.replace("/track", "")}/${deleteConfirmation.trackingNumber}`,
+        `${API_URL}/${deleteConfirmation.trackingNumber}`,
         {
           method: "DELETE",
           headers: { "x-api-key": API_KEY },
