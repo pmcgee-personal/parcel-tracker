@@ -32,6 +32,10 @@ export default function App() {
   const [hasMore, setHasMore] = useState(false);
   const [alreadyAutoLoaded, setAlreadyAutoLoaded] = useState(false);
 
+  // Delete confirmation state
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const API_URL = import.meta.env.VITE_API_BASE_URL;
   const API_KEY = import.meta.env.VITE_API_KEY;
 
@@ -184,6 +188,39 @@ export default function App() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmation) return;
+
+    setIsDeleting(true);
+
+    try {
+      const response = await fetch(
+        `${API_URL.replace("/track", "")}/${deleteConfirmation.trackingNumber}`,
+        {
+          method: "DELETE",
+          headers: { "x-api-key": API_KEY },
+        },
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to delete shipment");
+      }
+
+      alert("Shipment deleted successfully");
+      setDeleteConfirmation(null);
+      await fetchShipments();
+    } catch (err) {
+      alert(`Error deleting shipment: ${err.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteRequest = (shipment) => {
+    setDeleteConfirmation(shipment);
   };
 
   const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
@@ -344,6 +381,12 @@ export default function App() {
                       >
                         Last Activity
                       </th>
+                      <th
+                        scope="col"
+                        className="px-3 sm:px-6 py-4 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                      >
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/50 bg-transparent">
@@ -355,6 +398,7 @@ export default function App() {
                           shipment.trackingNumber
                         )}
                         onToggleExpand={toggleRow}
+                        onDelete={handleDeleteRequest}
                         getStatusStyle={getStatusStyle}
                         getLabelGeneratedDate={getLabelGeneratedDate}
                       />
@@ -388,6 +432,49 @@ export default function App() {
               )}
             </div>
           </>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteConfirmation && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-2xl max-w-md w-full p-6">
+              <h2 className="text-xl font-bold text-white mb-4">Delete Shipment?</h2>
+              <p className="text-slate-300 mb-6">
+                Are you sure you want to delete shipment{" "}
+                <span className="font-semibold text-cyan-400">
+                  {deleteConfirmation.trackingNumber}
+                </span>
+                ? This action cannot be undone.
+              </p>
+              <div className="space-y-2 mb-6 text-sm text-slate-400">
+                <p>
+                  <span className="font-medium text-slate-300">Carrier:</span> {deleteConfirmation.carrier}
+                </p>
+                <p>
+                  <span className="font-medium text-slate-300">Direction:</span> {deleteConfirmation.direction}
+                </p>
+                <p>
+                  <span className="font-medium text-slate-300">Status:</span> {deleteConfirmation.statusDescription}
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteConfirmation(null)}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-700 disabled:opacity-50 text-white rounded-md font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-600 disabled:opacity-50 text-white rounded-md font-medium transition-colors"
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

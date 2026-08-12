@@ -19,7 +19,7 @@ Globals:
     Runtime: nodejs22.x
   Api:
     Cors:
-      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowMethods: "'GET,POST,DELETE,OPTIONS'"
       AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
       AllowOrigin: "'*'"
     # Create an API key + usage plan for this API. The key is required only on
@@ -154,6 +154,36 @@ Resources:
           Properties:
             Path: /track
             Method: get
+            Auth:
+              ApiKeyRequired: true
+
+  # Lambda function to delete tracked shipments and stop tracking webhooks
+  DeleteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers/delete/index.handler
+      Environment:
+        Variables:
+          SHIPMENTS_TABLE: !Ref ShipmentsTable
+          EVENTS_TABLE: !Ref EventsTable
+          SECRET_NAME: "ParcelTracker/ShipStationApiKey"
+          NTFY_URL: !Ref NtfyUrl
+      Policies:
+        # Permission to read and delete from both DynamoDB tables
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ShipmentsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+        # Permission to read API key from Secrets Manager
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ParcelTracker/ShipStationApiKey-*"
+      Events:
+        DeleteApi:
+          Type: Api
+          Properties:
+            Path: /track/{trackingNumber}
+            Method: delete
             Auth:
               ApiKeyRequired: true
 

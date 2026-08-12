@@ -8,10 +8,13 @@ import {
 import EventTimeline from "./EventTimeline";
 import { ChevronDownIcon, ChevronRightIcon, HomeIcon, TruckIcon } from "./icons";
 
+const DELETABLE_STATUSES = new Set(["NY", "AC", "IT"]);
+
 export default function ShipmentCard({
   shipment,
   isExpanded,
   onToggleExpand,
+  onDelete,
   getStatusStyle,
   getLabelGeneratedDate,
 }) {
@@ -112,6 +115,21 @@ export default function ShipmentCard({
             ? timeSince(shipment.lastEventTimestamp)
             : "No events recorded"}
         </td>
+
+        {/* Delete Button */}
+        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center">
+          {DELETABLE_STATUSES.has(shipment.statusCode) ? (
+            <button
+              onClick={() => onDelete(shipment)}
+              className="text-red-400 hover:text-red-300 transition-colors focus:outline-none text-sm font-medium"
+              aria-label={`Delete shipment ${shipment.trackingNumber}`}
+            >
+              Delete
+            </button>
+          ) : (
+            <span className="text-slate-600 text-sm">—</span>
+          )}
+        </td>
       </tr>
 
       {/* Expanded History Row */}
@@ -155,6 +173,7 @@ ShipmentCard.propTypes = {
   }).isRequired,
   isExpanded: PropTypes.bool.isRequired,
   onToggleExpand: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
   getStatusStyle: PropTypes.func.isRequired,
   getLabelGeneratedDate: PropTypes.func.isRequired,
 };
