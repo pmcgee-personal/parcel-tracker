@@ -238,17 +238,29 @@ All endpoints are available under the API Gateway `Prod` stage. URLs are printed
 
 ## Local Development & Testing
 
+### Backend Setup
+
 Build locally:
 
 ```bash
 sam build
 ```
 
+Create an `env.json` for local Lambda testing (disables webhook signature verification for testing):
+
+```json
+{
+  "WebhookFunction": {
+    "WEBHOOK_VERIFY_DISABLED": "true"
+  },
+  "TrackFunction": {},
+  "ListFunction": {}
+}
+```
+
 Invoke a function with a test event:
 
 ```bash
-# The sample payload is unsigned, so disable webhook signature verification
-# for local runs (see env.json with {"WebhookFunction": {"WEBHOOK_VERIFY_DISABLED": "true"}}).
 sam local invoke WebhookFunction --event events/event.json --env-vars env.json
 sam local invoke TrackFunction --event events/event.json
 ```
@@ -268,6 +280,22 @@ curl http://localhost:3000/track
 
 > **Note:** `WEBHOOK_VERIFY_DISABLED=true` is for local testing only — never set it in a deployment, or the webhook will accept unsigned (forged) requests.
 
+### Backend Tests
+
+The shared `src/lib` modules and Lambda handlers are covered by unit tests using Node's built-in test runner (no dependencies to install):
+
+```bash
+npm test        # or: node --test
+```
+
+These run automatically in CI before any deploy, so a failing test blocks the deployment. Test files:
+- `test/batch.test.js` — BatchWrite chunking and retry logic
+- `test/dates.test.js` — Timezone-aware date utilities
+- `test/events.test.js` — Event item builder
+- `test/verifyShipEngineSignature.test.js` — RSA signature verification
+- `test/delete-handler.test.js` — Delete endpoint logic
+- `test/monitor-staleness.test.js` — Stale shipment detection and notifications
+
 ### Frontend Development
 
 The frontend uses Vite for fast dev rebuilds and HMR. Start the dev server:
@@ -284,16 +312,6 @@ Build for production:
 npm run build        # compiles to dist/
 npm run preview      # test the build locally
 ```
-
-### Backend tests
-
-The shared `src/lib` modules are covered by unit tests using Node's built-in test runner (no dependencies to install):
-
-```bash
-npm test        # or: node --test
-```
-
-These run automatically in CI before any deploy, so a failing test blocks the deployment.
 
 ---
 
@@ -313,21 +331,60 @@ The Lambda is granted `AWSSecretsManagerGetSecretValuePolicy` scoped to this exa
 
 ## Push Notifications
 
-The webhook handler sends push notifications via [ntfy](https://ntfy.sh/) on delivery, exception, and out-for-delivery events. Configuration:
+The system sends push notifications via [ntfy](https://ntfy.sh/) in two scenarios:
+
+### Immediate Notifications (Webhook)
+The webhook handler sends notifications on delivery, exception, and out-for-delivery events. Configuration:
 
 - **`NtfyUrl`** — the ntfy channel URL, passed as a CloudFormation parameter (`NoEcho`), injected from the `NTFY_URL` GitHub secret in CI.
 - **`APP_TIMEZONE`** — timezone used to decide the "calendar day" for the once-per-day out-for-delivery dedup (default `America/Los_Angeles`, set in `template.yaml`). Lambda runs in UTC, so this prevents a late-evening event from being attributed to the next day.
 
+### Stale Shipment Notifications (Scheduled)
+A scheduled Lambda function (`monitor-staleness`) runs periodically to detect shipments without updates for 48+ hours and sends a single ntfy notification with tracking numbers. 
+
+- Filters to **active statuses only**: accepted, in transit, exception (excludes delivered/cancelled)
+- Respects a **24-hour cooldown** to avoid notification spam
+- Notification format: `"2 shipment(s) without updates: ABC123, DEF456"` (clean, actionable tracking numbers)
+
+To enable this, ensure your GitHub Actions secrets include `NTFY_URL` and the CloudFormation template defines a CloudWatch Events trigger for the monitor-staleness function (typically daily).
+
 ---
 
-## Logs
+## Monitoring & Troubleshooting
+
+### CloudWatch Logs
 
 Tail live Lambda logs from the command line:
 
 ```bash
 sam logs -n WebhookFunction --stack-name parcel-tracker-stack --tail
 sam logs -n TrackFunction --stack-name parcel-tracker-stack --tail
+sam logs -n ListFunction --stack-name parcel-tracker-stack --tail
+sam logs -n DeleteFunction --stack-name parcel-tracker-stack --tail
+sam logs -n MonitorStalenessFunction --stack-name parcel-tracker-stack --tail
 ```
+
+### Common Issues
+
+**Webhook signature verification fails:**
+- Ensure `WEBHOOK_VERIFY_DISABLED` is not set in production
+- Verify the `NTFY_URL` is correct in CloudFormation parameters
+- Check that ShipEngine is configured to post to the correct endpoint
+
+**API requests return 403 Unauthorized:**
+- Confirm the API key is valid: `aws apigateway get-api-key --api-key <ApiKeyId> --include-value --query value --output text`
+- Verify the key is passed in the `x-api-key` header
+- Check that the usage plan quota hasn't been exceeded
+
+**Frontend shows "Could not load shipments":**
+- Verify the API URL and key in browser dev tools (Network tab)
+- Check Lambda logs for errors in ListFunction
+- Ensure DynamoDB tables have data (webhook events were processed)
+
+**Stale shipment notifications not received:**
+- Confirm `NTFY_URL` is set and the ntfy channel is accessible
+- Check that at least one shipment has `statusDescription` matching "accepted", "in transit", or "exception" with no updates for 48+ hours
+- Verify the 24-hour notification cooldown is not active for the shipment
 
 ---
 
