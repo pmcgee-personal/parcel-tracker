@@ -218,59 +218,67 @@ exports.handler = async (event) => {
     // Delete all associated events
     await deleteEvents(trackingNumber, requestId);
 
-    // Attempt to stop tracking webhooks on ShipEngine
-    const apiKey = await getApiKey();
-    const carrier = shipment.carrier || "unknown";
-    const stopTrackingUrl = `https://api.shipengine.com/v1/tracking/stop?carrier_code=${encodeURIComponent(carrier)}&tracking_number=${encodeURIComponent(trackingNumber)}`;
-
-    console.log(
-      `[${requestId}] ShipEngine request - URL: ${stopTrackingUrl}, Carrier: ${carrier}, Tracking: ${trackingNumber}`,
-    );
-
+    // Attempt to stop tracking webhooks on ShipEngine (only if carrier is present)
+    const carrier = shipment.carrier;
     let shipEngineError = null;
-    try {
-      const stopResponse = await fetchWithRetry(stopTrackingUrl, {
-        method: "POST",
-        headers: { "API-Key": apiKey, "Content-Type": "application/json" },
-      });
 
-      let responseBody = "";
-      try {
-        responseBody = await stopResponse.clone().text();
-      } catch {
-        responseBody = "[unable to read response body]";
-      }
+    if (!carrier) {
+      console.warn(
+        `[${requestId}] Shipment has no carrier field, cannot stop webhooks on ShipEngine`,
+      );
+      shipEngineError = "Shipment missing carrier (cannot stop webhooks)";
+    } else {
+      const apiKey = await getApiKey();
+      const stopTrackingUrl = `https://api.shipengine.com/v1/tracking/stop?carrier_code=${encodeURIComponent(carrier)}&tracking_number=${encodeURIComponent(trackingNumber)}`;
 
       console.log(
-        `[${requestId}] ShipEngine response - Status: ${stopResponse.status}, Body: ${responseBody}`,
+        `[${requestId}] ShipEngine request - URL: ${stopTrackingUrl}, Carrier: ${carrier}, Tracking: ${trackingNumber}`,
       );
 
-      if (!stopResponse.ok) {
-        shipEngineError = `ShipEngine returned ${stopResponse.status}: ${responseBody}`;
-        console.warn(
-          `[${requestId}] ShipEngine stop tracking failed: ${shipEngineError}`,
+      try {
+        const stopResponse = await fetchWithRetry(stopTrackingUrl, {
+          method: "POST",
+          headers: { "API-Key": apiKey, "Content-Type": "application/json" },
+        });
+
+        let responseBody = "";
+        try {
+          responseBody = await stopResponse.clone().text();
+        } catch {
+          responseBody = "[unable to read response body]";
+        }
+
+        console.log(
+          `[${requestId}] ShipEngine response - Status: ${stopResponse.status}, Body: ${responseBody}`,
+        );
+
+        if (!stopResponse.ok) {
+          shipEngineError = `ShipEngine returned ${stopResponse.status}: ${responseBody}`;
+          console.warn(
+            `[${requestId}] ShipEngine stop tracking failed: ${shipEngineError}`,
+          );
+
+          // Send ntfy notification about the webhook stop failure
+          await sendNtfyNotification(
+            `⚠️ Parcel Tracker: Failed to stop tracking webhooks for ${trackingNumber}. The shipment was deleted locally, but carrier webhooks may still send updates.`,
+          );
+        } else {
+          console.log(
+            `[${requestId}] Successfully stopped tracking webhooks for ${trackingNumber}`,
+          );
+        }
+      } catch (error) {
+        shipEngineError = error.message;
+        console.error(
+          `[${requestId}] Error calling ShipEngine stop tracking: ${error.message}`,
+          error,
         );
 
         // Send ntfy notification about the webhook stop failure
         await sendNtfyNotification(
           `⚠️ Parcel Tracker: Failed to stop tracking webhooks for ${trackingNumber}. The shipment was deleted locally, but carrier webhooks may still send updates.`,
         );
-      } else {
-        console.log(
-          `[${requestId}] Successfully stopped tracking webhooks for ${trackingNumber}`,
-        );
       }
-    } catch (error) {
-      shipEngineError = error.message;
-      console.error(
-        `[${requestId}] Error calling ShipEngine stop tracking: ${error.message}`,
-        error,
-      );
-
-      // Send ntfy notification about the webhook stop failure
-      await sendNtfyNotification(
-        `⚠️ Parcel Tracker: Failed to stop tracking webhooks for ${trackingNumber}. The shipment was deleted locally, but carrier webhooks may still send updates.`,
-      );
     }
 
     console.log(
