@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import PropTypes from "prop-types";
 
 export const EstimatedDeliveryWithHistory = ({ shipment }) => {
@@ -166,23 +166,20 @@ export const DeliveredOnWithDrift = ({ shipment }) => {
     return <span className="text-slate-300">{formattedActualDate}</span>;
   }
 
-  let originalEdd = null;
-
-  if (shipment.estimatedDeliveryDate) {
-    const currentEddDate = shipment.estimatedDeliveryDate.split("T")[0];
-    const filteredHistory = history.filter((historyItem) => {
-      const historyDate = historyItem.date
-        ? historyItem.date.split("T")[0]
-        : null;
-      return historyDate && historyDate !== currentEddDate;
-    });
-    originalEdd =
-      filteredHistory.length > 0
-        ? filteredHistory[0].date
-        : shipment.estimatedDeliveryDate;
-  } else {
-    originalEdd = history[0].date;
-  }
+  const originalEdd = shipment.estimatedDeliveryDate
+    ? (() => {
+        const currentEddDate = shipment.estimatedDeliveryDate.split("T")[0];
+        const filteredHistory = history.filter((historyItem) => {
+          const historyDate = historyItem.date
+            ? historyItem.date.split("T")[0]
+            : null;
+          return historyDate && historyDate !== currentEddDate;
+        });
+        return filteredHistory.length > 0
+          ? filteredHistory[0].date
+          : shipment.estimatedDeliveryDate;
+      })()
+    : history[0].date;
 
   if (!originalEdd) {
     return <span className="text-slate-300">{formattedActualDate}</span>;
@@ -208,48 +205,46 @@ export const DeliveredOnWithDrift = ({ shipment }) => {
     },
   );
 
-  let iconColor = "";
-  let titleColor = "";
-  let driftText = "";
-  let IconSVG = null;
-
-  if (actualTimestamp > originalTimestamp) {
-    iconColor = "text-rose-400 hover:text-rose-300";
-    titleColor = "text-rose-400";
-    driftText = "Delivered Late";
-    IconSVG = (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        className="w-4 h-4"
-      >
-        <path
-          fillRule="evenodd"
-          d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v4.59L7.3 9.24a.75.75 0 0 0-1.1 1.02l3.25 3.5a.75.75 0 0 0 1.1 0l3.25-3.5a.75.75 0 1 0-1.1-1.02l-1.95 2.1V6.75Z"
-          clipRule="evenodd"
-        />
-      </svg>
-    );
-  } else {
-    iconColor = "text-emerald-400 hover:text-emerald-300";
-    titleColor = "text-emerald-400";
-    driftText = "Delivered Early";
-    IconSVG = (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        className="w-4 h-4"
-      >
-        <path
-          fillRule="evenodd"
-          d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-.75-4.75a.75.75 0 0 0 1.5 0V8.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0L6.2 9.74a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z"
-          clipRule="evenodd"
-        />
-      </svg>
-    );
-  }
+  const { iconColor, titleColor, driftText, IconSVG } =
+    actualTimestamp > originalTimestamp
+      ? {
+          iconColor: "text-rose-400 hover:text-rose-300",
+          titleColor: "text-rose-400",
+          driftText: "Delivered Late",
+          IconSVG: (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="w-4 h-4"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v4.59L7.3 9.24a.75.75 0 0 0-1.1 1.02l3.25 3.5a.75.75 0 0 0 1.1 0l3.25-3.5a.75.75 0 1 0-1.1-1.02l-1.95 2.1V6.75Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          ),
+        }
+      : {
+          iconColor: "text-emerald-400 hover:text-emerald-300",
+          titleColor: "text-emerald-400",
+          driftText: "Delivered Early",
+          IconSVG: (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="w-4 h-4"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-.75-4.75a.75.75 0 0 0 1.5 0V8.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0L6.2 9.74a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          ),
+        };
 
   return (
     <div className="relative flex items-center gap-1.5">

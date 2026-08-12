@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import ShipmentForm from "./components/ShipmentForm";
 import ShipmentCard from "./components/ShipmentCard";
 import { getStatusStyle, getLabelGeneratedDate } from "./utils/shipmentHelpers";
@@ -95,6 +95,7 @@ export default function App() {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchShipments();
   }, [fetchShipments]);
 
@@ -186,7 +187,6 @@ export default function App() {
   };
 
   const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
-  const now = Date.now();
 
   const visibleShipments = showAll
     ? shipments
@@ -195,7 +195,8 @@ export default function App() {
           const lastActivityTime = shipment.lastEventTimestamp
             ? new Date(shipment.lastEventTimestamp).getTime()
             : 0;
-          return now - lastActivityTime <= THREE_DAYS_MS;
+          // eslint-disable-next-line react-hooks/purity
+          return Date.now() - lastActivityTime <= THREE_DAYS_MS;
         }
         return true;
       });
@@ -212,8 +213,9 @@ export default function App() {
       !alreadyAutoLoaded
     ) {
       console.log("Auto-loading next batch: initial data filtered out");
-      setAlreadyAutoLoaded(true);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchShipments(nextToken, true);
+      setAlreadyAutoLoaded(true);
     }
   }, [loading, shipments.length, visibleShipments.length, hasMore, alreadyAutoLoaded, nextToken, fetchShipments]);
 

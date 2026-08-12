@@ -1,4 +1,3 @@
-import React from "react";
 
 export const ChevronDownIcon = ({ className = "h-5 w-5" }) => (
   <svg
