@@ -1,0 +1,22 @@
+[loop]
+max_rounds = 3
+
+[[reviewers]]
+name = "claude-reviewer-1"
+provider = "anthropic"
+model = "claude-opus-4-6"
+thinking = "medium"
+
+[[reviewers]]
+name = "claude-reviewer-2"
+provider = "anthropic"
+model = "claude-opus-4-6"
+thinking = "medium"
+
+[producer]
+provider = "anthropic"
+model = "claude-opus-4-6"
+
+[synthesizer]
+provider = "anthropic"
+model = "claude-opus-4-6"
