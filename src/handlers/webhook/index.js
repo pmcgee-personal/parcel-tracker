@@ -9,6 +9,8 @@ const {
 const { docClient, SHIPMENTS_TABLE, EVENTS_TABLE } = require("../../lib/ddb");
 const { mapTrackingEvent } = require("../../lib/events");
 const { getDateOnly, getLocalDateString } = require("../../lib/dates");
+const { withRetry } = require("../../lib/dynamodbRetry");
+const { OperationTracker } = require("../../lib/operationTracker");
 
 const generateRequestId = () => {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -117,6 +119,7 @@ async function sendPushNotification(
 
 exports.handler = async (event) => {
   const requestId = generateRequestId();
+  let tracker; // Will be initialized once we have the tracking number
   // Avoid logging the full event: webhook bodies contain shipment PII
   // (signers, geolocation). Per-step logs below reference the tracking number.
   try {
@@ -176,30 +179,44 @@ exports.handler = async (event) => {
       };
     }
 
+    tracker = new OperationTracker(requestId, trackingNumber);
+
     // 1. Fetch the existing shipment to check for date changes & grab metadata
     let existingEdd = null;
     let direction = null;
     let source = null;
     let lastOfdDate = null; // NEW: To track when we last sent an OFD alert
 
-    try {
-      const getResult = await docClient.send(
-        new GetCommand({
-          TableName: SHIPMENTS_TABLE,
-          Key: { trackingNumber },
-        }),
-      );
+    const getResult = await withRetry(
+      new GetCommand({
+        TableName: SHIPMENTS_TABLE,
+        Key: { trackingNumber },
+      }),
+      docClient,
+      null,
+      {
+        requestId,
+        operationName: "FetchShipment",
+      },
+    );
 
-      if (getResult.Item) {
-        existingEdd = getResult.Item.estimatedDeliveryDate || null;
-        direction = getResult.Item.direction || null;
-        source = getResult.Item.source || null;
-        lastOfdDate = getResult.Item.lastOfdDate || null; // NEW
-      }
-    } catch (err) {
+    tracker.recordFetch(
+      getResult.success,
+      getResult.error,
+      getResult.attempt,
+      getResult.errorType,
+      getResult.isTransient,
+    );
+
+    if (getResult.success && getResult.data?.Item) {
+      existingEdd = getResult.data.Item.estimatedDeliveryDate || null;
+      direction = getResult.data.Item.direction || null;
+      source = getResult.data.Item.source || null;
+      lastOfdDate = getResult.data.Item.lastOfdDate || null; // NEW
+    } else if (!getResult.success) {
       console.warn(
-        "Could not retrieve existing shipment for comparison:",
-        err.message,
+        `[${requestId}] Could not retrieve existing shipment (transient=${getResult.isTransient}):`,
+        getResult.errorType,
       );
     }
 
@@ -305,14 +322,31 @@ exports.handler = async (event) => {
     console.log(
       `[${requestId}] Updating shipment details for: ${trackingNumber}`,
     );
-    try {
-      await docClient.send(new UpdateCommand(shipmentParams));
-    } catch (err) {
+
+    const updateResult = await withRetry(
+      new UpdateCommand(shipmentParams),
+      docClient,
+      null,
+      {
+        requestId,
+        operationName: "UpdateShipment",
+      },
+    );
+
+    tracker.recordUpdate(
+      updateResult.success,
+      updateResult.error,
+      updateResult.attempt,
+      updateResult.errorType,
+      updateResult.isTransient,
+    );
+
+    if (!updateResult.success) {
       // If the OFD condition fails (duplicate from concurrent request), that's ok
       // We still process events and skip the notification
-      if (err.name === "ConditionalCheckFailedException" && isOutForDelivery) {
-        console.log(
-          `[${requestId}] OFD notification already sent today (concurrent request), skipping`,
+      if (updateResult.errorType === "ConditionalCheckFailedException" && isOutForDelivery) {
+        console.info(
+          `[${requestId}] op=UpdateShipment error=ConditionalCheckFailedException type=expected reason=ofd_dedup_race`,
         );
         skipOfdNotification = true;
         // Re-throw to skip further processing since this is a duplicate
@@ -320,7 +354,11 @@ exports.handler = async (event) => {
           `Duplicate OFD notification for ${trackingNumber} (already processed today)`,
         );
       }
-      throw err;
+      // For other errors, log and re-throw
+      console.error(
+        `[${requestId}] op=UpdateShipment error=${updateResult.errorType} type=${updateResult.isTransient ? "transient" : "permanent"} attempt=${updateResult.attempt}`,
+      );
+      throw updateResult.error || new Error(`Update failed: ${updateResult.errorType}`);
     }
 
     // ==============================================================
@@ -331,60 +369,116 @@ exports.handler = async (event) => {
 
     const trackingEvents = data.events || [];
 
-    // Write events concurrently. Each keeps its conditional put so duplicates
-    // (same occurredAt) are skipped — BatchWrite can't express that condition.
-    const results = await Promise.all(
-      trackingEvents
-        .filter((trackingEvent) => trackingEvent.occurred_at)
-        .map((trackingEvent) =>
-          docClient
-            .send(
-              new PutCommand({
-                TableName: EVENTS_TABLE,
-                Item: mapTrackingEvent(trackingNumber, trackingEvent),
-                ConditionExpression: "attribute_not_exists(occurredAt)",
-              }),
-            )
-            .then(() => "new")
-            .catch((err) => {
-              if (err.name === "ConditionalCheckFailedException")
-                return "duplicate";
-              throw err;
-            }),
-        ),
+    // Write events concurrently with per-event tracking. Each keeps its conditional put
+    // so duplicates (same occurredAt) are skipped — BatchWrite can't express that condition.
+    const validEvents = trackingEvents.filter((trackingEvent) => trackingEvent.occurred_at);
+    const eventWritePromises = validEvents.map((trackingEvent, index) =>
+      (async () => {
+        const writeResult = await withRetry(
+          new PutCommand({
+            TableName: EVENTS_TABLE,
+            Item: mapTrackingEvent(trackingNumber, trackingEvent),
+            ConditionExpression: "attribute_not_exists(occurredAt)",
+          }),
+          docClient,
+          null,
+          {
+            requestId,
+            operationName: `WriteEvent[${index}]`,
+          },
+        );
+
+        // Track the event write
+        if (writeResult.errorType === "ConditionalCheckFailedException") {
+          // This is an expected duplicate, log as info
+          console.info(
+            `[${requestId}] op=WriteEvent[${index}] error=ConditionalCheckFailedException type=expected reason=duplicate`,
+          );
+          tracker.recordEventWrite(index, true, null, writeResult.attempt, "duplicate", false);
+          return { status: "duplicate", index };
+        } else if (writeResult.success) {
+          tracker.recordEventWrite(index, true, null, writeResult.attempt, null, false);
+          return { status: "new", index };
+        } else {
+          // Actual write failure
+          tracker.recordEventWrite(
+            index,
+            false,
+            writeResult.error,
+            writeResult.attempt,
+            writeResult.errorType,
+            writeResult.isTransient,
+          );
+          return { status: "failed", index, error: writeResult.errorType };
+        }
+      })(),
     );
 
-    const newEventsCount = results.filter((r) => r === "new").length;
-    const duplicateEventsCount = results.filter((r) => r === "duplicate").length;
+    const results = await Promise.all(eventWritePromises);
 
-    console.log(
-      `[${requestId}] Successfully processed webhook for ${trackingNumber}: ${newEventsCount} new, ${duplicateEventsCount} duplicates`,
-    );
+    const newEventsCount = results.filter((r) => r.status === "new").length;
+    const duplicateEventsCount = results.filter((r) => r.status === "duplicate").length;
+    const failedEventsCount = results.filter((r) => r.status === "failed").length;
+
+    const trackerSummary = tracker.getSummary();
+    const hasEventFailures = failedEventsCount > 0;
+    const hasPermanentFailures = tracker.hadPermanentFailures();
+
+    if (hasEventFailures) {
+      console.warn(
+        `[${requestId}] Partial webhook processing for ${trackingNumber}: ${newEventsCount} new, ${duplicateEventsCount} duplicates, ${failedEventsCount} failed`,
+      );
+    } else {
+      console.log(
+        `[${requestId}] Successfully processed webhook for ${trackingNumber}: ${newEventsCount} new, ${duplicateEventsCount} duplicates`,
+      );
+    }
+
+    // Determine response status: 500 only if permanent failures, 207 for partial, 200 for all success
+    const statusCode = hasPermanentFailures ? 500 : hasEventFailures ? 207 : 200;
 
     return {
-      statusCode: 200,
+      statusCode,
       headers: {
         "Content-Type": "application/json",
         "X-Robots-Tag": "noindex, nofollow",
       },
       body: JSON.stringify({
-        message: "Webhook processed successfully",
+        message:
+          statusCode === 200
+            ? "Webhook processed successfully"
+            : statusCode === 207
+              ? "Webhook processed with partial failures"
+              : "Webhook processing failed",
         shipment: trackingNumber,
         newEventsAdded: newEventsCount,
         duplicatesIgnored: duplicateEventsCount,
+        failedEventWrites: failedEventsCount,
         requestId,
+        operationResults: trackerSummary,
       }),
     };
   } catch (error) {
-    console.error(`[${requestId}] Error handling webhook:`, error.message);
+    const errorType = error.code || error.name || error.constructor.name || "UnknownError";
+    const isTransient = error.$metadata?.httpStatusCode >= 500 || error.$metadata?.httpStatusCode === 429;
+
+    console.error(
+      `[${requestId}] Error handling webhook: error=${errorType} type=${isTransient ? "transient" : "permanent"} message=${error.message}`,
+    );
+
+    const statusCode = isTransient ? 503 : 500;
+
     return {
-      statusCode: 500,
+      statusCode,
       headers: {
         "Content-Type": "application/json",
         "X-Robots-Tag": "noindex, nofollow",
       },
       body: JSON.stringify({
-        message: "Internal Server Error",
+        message:
+          statusCode === 503
+            ? "Service temporarily unavailable - please retry"
+            : "Internal Server Error",
         requestId,
       }),
     };
