@@ -101,8 +101,12 @@ const sendNtfyNotification = async (message) => {
   try {
     await fetch(NTFY_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: message,
+      headers: {
+        Title: "Parcel Tracker Alert",
+        Priority: "high",
+        Tags: "warning",
+      },
     });
   } catch (error) {
     console.error("Failed to send ntfy notification:", error);

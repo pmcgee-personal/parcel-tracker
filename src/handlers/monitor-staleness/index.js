@@ -86,7 +86,7 @@ async function monitorStaleness() {
     console.log(`Found ${staleShipments.length} stale shipments to notify`);
 
     const trackingNumbers = staleShipments.map((s) => s.trackingNumber);
-    const message = `${staleShipments.length} shipment(s) without updates: ${trackingNumbers.join(", ")}`;
+    const message = `No events for ${staleShipments.length} shipment(s): ${trackingNumbers.join(", ")}`;
 
     await sendNtfyNotification(message);
 
@@ -136,8 +136,12 @@ async function sendNtfyNotification(message) {
   try {
     const response = await fetch(NTFY_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: message,
+      headers: {
+        Title: "No Events ⏳",
+        Priority: "default",
+        Tags: "hourglass",
+      },
     });
 
     if (!response.ok) {
