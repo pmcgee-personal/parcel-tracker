@@ -1,9 +1,9 @@
-const { ScanCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
+const { UpdateCommand } = require("@aws-sdk/lib-dynamodb");
 const {
   SecretsManagerClient,
   GetSecretValueCommand,
 } = require("@aws-sdk/client-secrets-manager");
-const { docClient, SHIPMENTS_TABLE } = require("../../lib/ddb");
+const { docClient, SHIPMENTS_TABLE, scanAll } = require("../../lib/ddb");
 
 const secretsClient = new SecretsManagerClient({
   region: process.env.AWS_REGION,
@@ -18,15 +18,12 @@ async function monitorStaleness() {
   console.log("Starting staleness monitoring scan");
 
   try {
-    // Scan all shipments
-    const command = new ScanCommand({
+    // Scan all shipments, following pagination so no shipments are skipped
+    const shipments = await scanAll({
       TableName: SHIPMENTS_TABLE,
       ProjectionExpression:
         "trackingNumber,carrier,statusDescription,lastEventTimestamp,lastStaleNotificationAt",
     });
-
-    const response = await docClient.send(command);
-    const shipments = response.Items || [];
 
     console.log(`Scanned ${shipments.length} shipments`);
 

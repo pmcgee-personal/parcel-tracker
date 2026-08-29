@@ -41,6 +41,11 @@ Module.prototype.require = function (id) {
   }
 
   if (id === "../../lib/ddb") {
+    class ScanCommand {
+      constructor(params) {
+        this.params = params;
+      }
+    }
     return {
       docClient: {
         get send() {
@@ -48,6 +53,27 @@ Module.prototype.require = function (id) {
         },
       },
       SHIPMENTS_TABLE: "Shipments",
+      scanAll: async (params) => {
+        let accumulatedItems = [];
+        let lastEvaluatedKey = null;
+
+        do {
+          const scanParams = { ...params };
+          if (lastEvaluatedKey) {
+            scanParams.ExclusiveStartKey = lastEvaluatedKey;
+          }
+
+          const response = await mockDocClientSend(new ScanCommand(scanParams));
+
+          if (response.Items) {
+            accumulatedItems = accumulatedItems.concat(response.Items);
+          }
+
+          lastEvaluatedKey = response.LastEvaluatedKey;
+        } while (lastEvaluatedKey);
+
+        return accumulatedItems;
+      },
     };
   }
 
@@ -296,4 +322,57 @@ test("Monitor staleness - filters by active status only", async () => {
   assert(notificationBody.includes("STALE_IN_TRANSIT"));
   assert(!notificationBody.includes("STALE_DELIVERED"));
   assert(!notificationBody.includes("STALE_CANCELLED"));
+});
+
+test("Monitor staleness - follows pagination across multiple scan pages", async () => {
+  const now = Date.now();
+  const fortyEightHoursAgo = new Date(now - 48.5 * 60 * 60 * 1000).toISOString();
+
+  // Split across two "pages" as DynamoDB would when a scan exceeds 1MB
+  const pageOne = [
+    {
+      trackingNumber: "PAGE1_STALE",
+      carrier: "ups",
+      statusDescription: "In Transit",
+      lastEventTimestamp: fortyEightHoursAgo,
+    },
+  ];
+  const pageTwo = [
+    {
+      trackingNumber: "PAGE2_STALE",
+      carrier: "usps",
+      statusDescription: "In Transit",
+      lastEventTimestamp: fortyEightHoursAgo,
+    },
+  ];
+
+  let scanCalls = 0;
+  mockDocClientSend = async (command) => {
+    if (command.constructor.name === "ScanCommand") {
+      scanCalls++;
+      if (scanCalls === 1) {
+        return { Items: pageOne, LastEvaluatedKey: { trackingNumber: "PAGE1_STALE" } };
+      }
+      return { Items: pageTwo };
+    }
+    if (command.constructor.name === "UpdateCommand") {
+      return {};
+    }
+    return {};
+  };
+
+  mockFetchCalls = [];
+
+  const response = await handler({});
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(scanCalls, 2, "Should follow LastEvaluatedKey to a second scan page");
+
+  const body = JSON.parse(response.body);
+  const trackingNumbers = body.staleShipments.map((s) => s.trackingNumber);
+  assert(trackingNumbers.includes("PAGE1_STALE"));
+  assert(
+    trackingNumbers.includes("PAGE2_STALE"),
+    "Shipments on later scan pages must not be silently dropped",
+  );
 });

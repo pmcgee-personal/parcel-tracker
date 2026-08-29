@@ -2,6 +2,7 @@ const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DynamoDBDocumentClient,
   BatchWriteCommand,
+  ScanCommand,
 } = require("@aws-sdk/lib-dynamodb");
 const { chunkedWrite } = require("./batch");
 
@@ -27,4 +28,28 @@ async function batchWrite(tableName, items) {
   );
 }
 
-module.exports = { docClient, SHIPMENTS_TABLE, EVENTS_TABLE, batchWrite };
+// Scan an entire table/index, following LastEvaluatedKey until exhausted.
+// Only safe for tables small enough to fully enumerate in one invocation.
+async function scanAll(params) {
+  let accumulatedItems = [];
+  let lastEvaluatedKey = null;
+
+  do {
+    const scanParams = { ...params };
+    if (lastEvaluatedKey) {
+      scanParams.ExclusiveStartKey = lastEvaluatedKey;
+    }
+
+    const response = await docClient.send(new ScanCommand(scanParams));
+
+    if (response.Items) {
+      accumulatedItems = accumulatedItems.concat(response.Items);
+    }
+
+    lastEvaluatedKey = response.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return accumulatedItems;
+}
+
+module.exports = { docClient, SHIPMENTS_TABLE, EVENTS_TABLE, batchWrite, scanAll };

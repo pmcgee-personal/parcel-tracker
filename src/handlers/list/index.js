@@ -3,35 +3,12 @@ const {
   docClient,
   SHIPMENTS_TABLE: TABLE_NAME,
   EVENTS_TABLE,
+  scanAll,
 } = require("../../lib/ddb");
 
 const generateRequestId = () => {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 };
-
-// Helper to scan all items (used for events where we need full dataset)
-async function scanAll(docClient, params) {
-  let accumulatedItems = [];
-  let lastEvaluatedKey = null;
-
-  do {
-    const scanParams = { ...params };
-    if (lastEvaluatedKey) {
-      scanParams.ExclusiveStartKey = lastEvaluatedKey;
-    }
-
-    const command = new ScanCommand(scanParams);
-    const response = await docClient.send(command);
-
-    if (response.Items) {
-      accumulatedItems = accumulatedItems.concat(response.Items);
-    }
-
-    lastEvaluatedKey = response.LastEvaluatedKey;
-  } while (lastEvaluatedKey);
-
-  return accumulatedItems;
-}
 
 // Helper to scan with pagination support
 async function scanWithPagination(docClient, params, limit, nextToken) {
@@ -102,7 +79,7 @@ exports.handler = async (event) => {
     // 2. Scan ALL Events (needed to match with paginated shipments)
     let eventItems = [];
     if (EVENTS_TABLE) {
-      eventItems = await scanAll(docClient, { TableName: EVENTS_TABLE });
+      eventItems = await scanAll({ TableName: EVENTS_TABLE });
       console.log(`[${requestId}] Retrieved ${eventItems.length} events`);
     } else {
       console.warn(
