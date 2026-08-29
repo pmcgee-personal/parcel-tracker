@@ -14,7 +14,7 @@ const mockDocClient = {
 
 const mockSecretsClient = {
   send: async () => {
-    return { SecretString: "test-api-key" };
+    return { SecretString: JSON.stringify({ ShipStationApiKey: "test-api-key" }) };
   },
 };
 

@@ -44,7 +44,13 @@ const getApiKey = async () => {
     const response = await secretsClient.send(
       new GetSecretValueCommand({ SecretId: SECRET_NAME }),
     );
-    cachedApiKey = response.SecretString;
+    const secret = JSON.parse(response.SecretString);
+    if (!secret.ShipStationApiKey) {
+      throw new Error(
+        `Secret '${SECRET_NAME}' is missing the 'ShipStationApiKey' field`,
+      );
+    }
+    cachedApiKey = secret.ShipStationApiKey;
     cachedApiKeyExpiry = now + 3600000; // Cache for 1 hour
     return cachedApiKey;
   } catch (error) {
