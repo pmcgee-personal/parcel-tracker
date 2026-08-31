@@ -8,8 +8,12 @@ const {
   SHIPMENTS_TABLE,
   EVENTS_TABLE,
   batchWrite,
+  queryEventIdentities,
 } = require("../../lib/ddb");
-const { mapTrackingEvent } = require("../../lib/events");
+const {
+  mapTrackingEvent,
+  dedupeIncomingEvents,
+} = require("../../lib/events");
 const { getDateOnly } = require("../../lib/dates");
 
 const generateRequestId = () => {
@@ -252,11 +256,29 @@ exports.handler = async (event) => {
     );
 
     if (trackingData.events && trackingData.events.length > 0) {
-      // Drop events without a sort key and de-duplicate by occurredAt, since
-      // BatchWrite rejects a batch containing duplicate primary keys.
+      // Registration re-reads the whole timeline from GET /v1/tracking, whose
+      // occurred_at disagrees with the webhook feed's for the same carrier scan.
+      // Skip events the shipment already has, or re-registering a tracked package
+      // writes the overlap again under different sort keys. See eventIdentity in
+      // src/lib/events.js.
+      let existingEvents = [];
+      try {
+        existingEvents = await queryEventIdentities(trackingData.tracking_number);
+      } catch (error) {
+        console.warn(
+          `[${requestId}] Could not load existing events for dedup: ${error.name || error.message}`,
+        );
+      }
+
+      const { toWrite, duplicates } = dedupeIncomingEvents(
+        trackingData.events,
+        existingEvents,
+      );
+
+      // BatchWrite rejects a batch containing duplicate primary keys, so collapse
+      // any remaining occurred_at collisions before writing.
       const byOccurredAt = new Map();
-      for (const trackingEvent of trackingData.events) {
-        if (!trackingEvent.occurred_at) continue;
+      for (const trackingEvent of toWrite) {
         byOccurredAt.set(
           trackingEvent.occurred_at,
           mapTrackingEvent(trackingData.tracking_number, trackingEvent),
@@ -265,8 +287,10 @@ exports.handler = async (event) => {
       const eventItems = [...byOccurredAt.values()];
       if (eventItems.length > 0) {
         await batchWrite(EVENTS_TABLE, eventItems);
-        console.log(`[${requestId}] Initial events written: ${eventItems.length}`);
       }
+      console.log(
+        `[${requestId}] Initial events: ${eventItems.length} written, ${duplicates} already present`,
+      );
     }
 
     console.log(`[${requestId}] Successfully registered package: ${trackingNumber}`);

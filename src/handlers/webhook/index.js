@@ -6,8 +6,16 @@ const {
 const {
   verifyShipEngineSignature,
 } = require("../../lib/verifyShipEngineSignature");
-const { docClient, SHIPMENTS_TABLE, EVENTS_TABLE } = require("../../lib/ddb");
-const { mapTrackingEvent } = require("../../lib/events");
+const {
+  docClient,
+  SHIPMENTS_TABLE,
+  EVENTS_TABLE,
+  queryEventIdentities,
+} = require("../../lib/ddb");
+const {
+  mapTrackingEvent,
+  dedupeIncomingEvents,
+} = require("../../lib/events");
 const { getDateOnly, getLocalDateString } = require("../../lib/dates");
 const { withRetry } = require("../../lib/dynamodbRetry");
 const { OperationTracker } = require("../../lib/operationTracker");
@@ -369,9 +377,29 @@ exports.handler = async (event) => {
 
     const trackingEvents = data.events || [];
 
+    // Recognise events this shipment already has before writing. The conditional
+    // put below only catches an exact occurredAt collision, and the webhook and
+    // GET /v1/tracking feeds disagree on that value, so the same carrier scan
+    // would otherwise land twice under two different sort keys. See eventIdentity
+    // in src/lib/events.js for why the comparison is on carrier_occurred_at.
+    let existingEvents = [];
+    try {
+      existingEvents = await queryEventIdentities(trackingNumber);
+    } catch (error) {
+      // Non-fatal: fall through to writing everything and let the conditional put
+      // catch exact-key duplicates. Worst case is the previous behaviour.
+      console.warn(
+        `[${requestId}] Could not load existing events for dedup: ${error.name || error.message}`,
+      );
+    }
+
+    const {
+      toWrite: validEvents,
+      duplicates: knownDuplicatesCount,
+    } = dedupeIncomingEvents(trackingEvents, existingEvents);
+
     // Write events concurrently with per-event tracking. Each keeps its conditional put
     // so duplicates (same occurredAt) are skipped — BatchWrite can't express that condition.
-    const validEvents = trackingEvents.filter((trackingEvent) => trackingEvent.occurred_at);
     const eventWritePromises = validEvents.map((trackingEvent, index) =>
       (async () => {
         const writeResult = await withRetry(
@@ -417,7 +445,11 @@ exports.handler = async (event) => {
     const results = await Promise.all(eventWritePromises);
 
     const newEventsCount = results.filter((r) => r.status === "new").length;
-    const duplicateEventsCount = results.filter((r) => r.status === "duplicate").length;
+    // Duplicates now come from two places: those recognised up front by identity,
+    // and those the conditional put rejected on an exact occurredAt collision.
+    const duplicateEventsCount =
+      results.filter((r) => r.status === "duplicate").length +
+      knownDuplicatesCount;
     const failedEventsCount = results.filter((r) => r.status === "failed").length;
 
     const trackerSummary = tracker.getSummary();

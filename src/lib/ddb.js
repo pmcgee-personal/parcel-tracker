@@ -2,6 +2,7 @@ const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DynamoDBDocumentClient,
   BatchWriteCommand,
+  QueryCommand,
   ScanCommand,
 } = require("@aws-sdk/lib-dynamodb");
 const { chunkedWrite } = require("./batch");
@@ -28,6 +29,37 @@ async function batchWrite(tableName, items) {
   );
 }
 
+// Fetch the fields needed to recognise events a shipment already has. This is a
+// partition query, so it reads one shipment's timeline rather than the table.
+async function queryEventIdentities(trackingNumber) {
+  let items = [];
+  let lastEvaluatedKey = null;
+
+  do {
+    const response = await docClient.send(
+      new QueryCommand({
+        TableName: EVENTS_TABLE,
+        KeyConditionExpression: "trackingNumber = :tn",
+        ExpressionAttributeValues: { ":tn": trackingNumber },
+        ProjectionExpression: "#coa, #desc",
+        ExpressionAttributeNames: {
+          "#coa": "carrierOccurredAt",
+          "#desc": "description",
+        },
+        ...(lastEvaluatedKey ? { ExclusiveStartKey: lastEvaluatedKey } : {}),
+      }),
+    );
+
+    if (response.Items) {
+      items = items.concat(response.Items);
+    }
+
+    lastEvaluatedKey = response.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return items;
+}
+
 // Scan an entire table/index, following LastEvaluatedKey until exhausted.
 // Only safe for tables small enough to fully enumerate in one invocation.
 async function scanAll(params) {
@@ -52,4 +84,11 @@ async function scanAll(params) {
   return accumulatedItems;
 }
 
-module.exports = { docClient, SHIPMENTS_TABLE, EVENTS_TABLE, batchWrite, scanAll };
+module.exports = {
+  docClient,
+  SHIPMENTS_TABLE,
+  EVENTS_TABLE,
+  batchWrite,
+  queryEventIdentities,
+  scanAll,
+};
