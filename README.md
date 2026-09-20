@@ -21,7 +21,7 @@ This project was built as a learning project and personal tool, combining real S
 ## Key Features
 
 - **Unified Dashboard**: View both Inbound and Outbound shipments in a single interface.
-- **Smart Filtering**: Automatically hides "Delivered" packages after 3 days to keep the dashboard clutter-free, with a toggle to view the full history.
+- **Paginated Listing**: Shows the 10 most recently active shipments first, with Previous/Next paging through the rest.
 - **Expandable Timelines**: Click on any shipment to reveal a dynamically sorted dropdown containing its full event history and geographic routing.
 - **Quick Registration**: Instantly add new tracking numbers (USPS, UPS, FedEx) directly from the UI control panel.
 - **Real-Time Webhooks**: Backend automatically processes carrier push events to keep the DynamoDB tables and frontend up-to-date.
@@ -72,7 +72,7 @@ parcel-tracker/
 │   ├── handlers/
 │   │   ├── webhook/         # Ingests carrier tracking updates (POST /webhook)
 │   │   ├── track/           # Registers a new tracking number (POST /track)
-│   │   └── list/            # Returns all shipments for the dashboard (GET /track)
+│   │   └── list/            # Returns a paginated page of shipments, newest activity first (GET /track)
 │   └── lib/                 # Shared helpers used by the handlers
 │       ├── ddb.js           #   DynamoDB client, table names, batchWrite
 │       ├── batch.js         #   SDK-free BatchWrite chunking/retry logic
@@ -126,7 +126,7 @@ App.jsx (main container)
 │  └─ Form inputs (tracking, carrier, direction, service level, source)
 │  └─ Refresh button & status messages
 │
-└─ ShipmentCard (map over visibleShipments)
+└─ ShipmentCard (map over shipments for the current page)
    ├─ Shipment row: tracking info, status badge, delivery dates
    ├─ Direction badge (Inbound/Outbound)
    ├─ Drift indicators (early/delayed delivery alerts)
@@ -140,7 +140,7 @@ App.jsx (main container)
 
 | Component | Lines | Purpose |
 |-----------|-------|---------|
-| **App.jsx** | 342 | Main state container, data fetching, form validation |
+| **App.jsx** | 423 | Main state container, data fetching, pagination, form validation |
 | **ShipmentForm.jsx** | 117 | Form for adding tracking numbers, refresh button, messaging |
 | **ShipmentCard.jsx** | 167 | Individual shipment row with expand/collapse, all table columns |
 | **EventTimeline.jsx** | 64 | Pure presentational component for tracking events table |
@@ -295,6 +295,7 @@ These run automatically in CI before any deploy, so a failing test blocks the de
 - `test/verifyShipEngineSignature.test.js` — RSA signature verification
 - `test/delete-handler.test.js` — Delete endpoint logic
 - `test/monitor-staleness.test.js` — Stale shipment detection and notifications
+- `test/list-handler.test.js` — Listing pagination and newest-first sorting
 
 ### Frontend Development
 

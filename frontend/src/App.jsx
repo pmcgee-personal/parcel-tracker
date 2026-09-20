@@ -7,13 +7,13 @@ import {
   sanitizeCarrier,
   sanitizeTextField,
 } from "./utils/sanitize";
-import { sortShipments } from "./utils/sortShipments";
+
+const PAGE_SIZE = 10;
 
 export default function App() {
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showAll, setShowAll] = useState(false);
 
   // Form Controls
   const [newTracking, setNewTracking] = useState("");
@@ -27,10 +27,9 @@ export default function App() {
   // Expandable Dropdowns
   const [expandedShipments, setExpandedShipments] = useState(new Set());
 
-  // Pagination state
-  const [nextToken, setNextToken] = useState(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [alreadyAutoLoaded, setAlreadyAutoLoaded] = useState(false);
+  // Pagination state — newest shipments first, page 1 is always the newest page.
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Delete confirmation state
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
@@ -50,14 +49,12 @@ export default function App() {
   };
 
   const fetchShipments = useCallback(
-    async (token = null, isLoadMore = false) => {
+    async (targetPage = 1) => {
       try {
         setLoading(true);
         const url = new URL(API_URL);
-        url.searchParams.set("limit", "50");
-        if (token) {
-          url.searchParams.set("nextToken", token);
-        }
+        url.searchParams.set("page", String(targetPage));
+        url.searchParams.set("pageSize", String(PAGE_SIZE));
 
         const response = await fetch(url.toString(), {
           headers: { "x-api-key": API_KEY },
@@ -67,26 +64,12 @@ export default function App() {
         }
 
         const responseData = await response.json();
-
-        // Handle both old array format and new paginated format
-        const shipmentList = Array.isArray(responseData)
-          ? responseData
-          : responseData.shipments || [];
+        const shipmentList = responseData.shipments || [];
         const pagination = responseData.pagination || null;
 
-        // Sort shipments using the canonical sorting function
-        const sortedData = sortShipments(shipmentList);
-
-        if (isLoadMore) {
-          // Combine with existing shipments and re-sort the entire list
-          // to maintain correct order across paginated results
-          setShipments((prev) => sortShipments([...prev, ...sortedData]));
-        } else {
-          setShipments(sortedData);
-        }
-
-        setNextToken(pagination?.nextToken || null);
-        setHasMore(pagination?.hasMore || false);
+        setShipments(shipmentList);
+        setPage(pagination?.page || targetPage);
+        setTotalPages(pagination?.totalPages || 1);
         setError(null);
       } catch (err) {
         console.error("Failed to fetch shipments:", err);
@@ -100,7 +83,7 @@ export default function App() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchShipments();
+    fetchShipments(1);
   }, [fetchShipments]);
 
   const validateForm = (tracking = newTracking, carrier = newCarrier) => {
@@ -181,7 +164,8 @@ export default function App() {
       setNewDirection("Inbound");
       setNewServiceLevel("");
       setNewSource("");
-      await fetchShipments();
+      // New shipment is the newest, so it lands on page 1.
+      await fetchShipments(1);
       setTimeout(() => setActionMessage({ type: "", text: "" }), 3000);
     } catch (err) {
       setActionMessage({ type: "error", text: err.message });
@@ -211,7 +195,9 @@ export default function App() {
 
       alert("Shipment deleted successfully");
       setDeleteConfirmation(null);
-      await fetchShipments();
+      // If that was the only shipment on this page, step back a page.
+      const nextPage = shipments.length === 1 && page > 1 ? page - 1 : page;
+      await fetchShipments(nextPage);
     } catch (err) {
       alert(`Error deleting shipment: ${err.message}`);
     } finally {
@@ -222,39 +208,6 @@ export default function App() {
   const handleDeleteRequest = (shipment) => {
     setDeleteConfirmation(shipment);
   };
-
-  const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
-
-  const visibleShipments = showAll
-    ? shipments
-    : shipments.filter((shipment) => {
-        if (shipment.statusCode === "DE") {
-          const lastActivityTime = shipment.lastEventTimestamp
-            ? new Date(shipment.lastEventTimestamp).getTime()
-            : 0;
-          // eslint-disable-next-line react-hooks/purity
-          return Date.now() - lastActivityTime <= THREE_DAYS_MS;
-        }
-        return true;
-      });
-
-  const hasHiddenShipments = shipments.length > visibleShipments.length;
-
-  // Auto-load next batch if initial load shows data but nothing passes filter
-  useEffect(() => {
-    if (
-      !loading &&
-      shipments.length > 0 &&
-      visibleShipments.length === 0 &&
-      hasMore &&
-      !alreadyAutoLoaded
-    ) {
-      console.log("Auto-loading next batch: initial data filtered out");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      fetchShipments(nextToken, true);
-      setAlreadyAutoLoaded(true);
-    }
-  }, [loading, shipments.length, visibleShipments.length, hasMore, alreadyAutoLoaded, nextToken, fetchShipments]);
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 py-12 px-4 sm:px-6 lg:px-8 font-sans">
@@ -284,7 +237,7 @@ export default function App() {
           isFormValid={isFormValid}
           onSubmit={handleAddShipment}
           loading={loading}
-          onRefresh={fetchShipments}
+          onRefresh={() => fetchShipments(page)}
           actionMessage={actionMessage}
         />
 
@@ -298,15 +251,6 @@ export default function App() {
         {error && (
           <div className="bg-rose-900/20 border-l-4 border-rose-500 p-4 rounded-md mb-8">
             <p className="text-sm text-rose-400">{error}</p>
-          </div>
-        )}
-
-        {alreadyAutoLoaded && shipments.length > 0 && visibleShipments.length === 0 && (
-          <div className="flex justify-center items-center py-20">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-              <p className="text-sm text-slate-400">Searching for active shipments...</p>
-            </div>
           </div>
         )}
 
@@ -390,7 +334,7 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/50 bg-transparent">
-                    {visibleShipments.map((shipment) => (
+                    {shipments.map((shipment) => (
                       <ShipmentCard
                         key={shipment.trackingNumber}
                         shipment={shipment}
@@ -409,27 +353,24 @@ export default function App() {
             </div>
 
             {/* Pagination Controls */}
-            <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center items-center">
-              {/* Load More Button (Server-side pagination) */}
-              {hasMore && (
-                <button
-                  onClick={() => fetchShipments(nextToken, true)}
-                  disabled={loading}
-                  className="px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-full text-sm font-semibold transition-all border border-cyan-600 shadow-md flex items-center gap-2"
-                >
-                  Load More Shipments
-                </button>
-              )}
-
-              {/* Show All Deliveries Toggle (Client-side filtering) */}
-              {hasHiddenShipments && (
-                <button
-                  onClick={() => setShowAll(!showAll)}
-                  className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full text-sm font-semibold transition-all border border-slate-700 shadow-md flex items-center gap-2"
-                >
-                  {showAll ? "Hide Older Deliveries" : "Show All Deliveries"}
-                </button>
-              )}
+            <div className="mt-6 flex items-center justify-center gap-4">
+              <button
+                onClick={() => fetchShipments(page - 1)}
+                disabled={loading || page <= 1}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-300 rounded-full text-sm font-semibold transition-all border border-slate-700 shadow-md"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-slate-400 tabular-nums">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                onClick={() => fetchShipments(page + 1)}
+                disabled={loading || page >= totalPages}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-300 rounded-full text-sm font-semibold transition-all border border-slate-700 shadow-md"
+              >
+                Next
+              </button>
             </div>
           </>
         )}

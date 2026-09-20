@@ -60,6 +60,33 @@ async function queryEventIdentities(trackingNumber) {
   return items;
 }
 
+// Fetch the full event timeline for one shipment (partition-key query). Used by
+// the list handler to join events onto a single page of shipments instead of
+// scanning the entire Events table on every request.
+async function queryEventsForTracking(trackingNumber) {
+  let items = [];
+  let lastEvaluatedKey = null;
+
+  do {
+    const response = await docClient.send(
+      new QueryCommand({
+        TableName: EVENTS_TABLE,
+        KeyConditionExpression: "trackingNumber = :tn",
+        ExpressionAttributeValues: { ":tn": trackingNumber },
+        ...(lastEvaluatedKey ? { ExclusiveStartKey: lastEvaluatedKey } : {}),
+      }),
+    );
+
+    if (response.Items) {
+      items = items.concat(response.Items);
+    }
+
+    lastEvaluatedKey = response.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return items;
+}
+
 // Scan an entire table/index, following LastEvaluatedKey until exhausted.
 // Only safe for tables small enough to fully enumerate in one invocation.
 async function scanAll(params) {
@@ -90,5 +117,6 @@ module.exports = {
   EVENTS_TABLE,
   batchWrite,
   queryEventIdentities,
+  queryEventsForTracking,
   scanAll,
 };
