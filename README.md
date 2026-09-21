@@ -416,6 +416,45 @@ Required GitHub secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `NTFY_URL
 
 ---
 
+## Known Issues / Technical Debt Backlog
+
+From a full-project review on 2026-09-21. Findings were grouped into tiers by severity/risk; this section tracks what's done and what's still open so a future session can resume without re-deriving the analysis.
+
+### Done (2026-09-21)
+
+**Tier 0 — correctness bugs:**
+- `delete/index.js` deleted the shipment row before its events; a partial failure orphaned events under an already-"deleted" shipment and returned a misleading 500. Reordered: events delete first, so a failure leaves the shipment intact for retry.
+- `ShipmentCard.jsx`'s expanded-row `colSpan={9}` was one short of the table's actual 10 columns.
+- `ShipmentCard.jsx`/`EventTimeline.jsx` sorted and displayed events by `carrierOccurredAt`, which is legitimately nullable — `new Date(null)` collapsed to the Unix epoch. Switched to the guaranteed-non-null `occurredAt` for sorting, with `carrierOccurredAt || occurredAt` for display.
+
+**Tier 1 — consolidation:**
+- Extracted `src/lib/http.js`, `src/lib/ntfy.js`, `src/lib/fetchWithRetry.js`, `src/lib/secrets.js`, replacing duplicated `generateRequestId` (4 copies), `sendNtfyNotification` (3 copies), `fetchWithRetry` (2 verbatim copies), and inconsistent API-key TTL caching across `track`/`delete`/`list`/`webhook`/`monitor-staleness`.
+- Frontend: `DriftIndicator.jsx` now imports icons from `icons.jsx` instead of reimplementing them (~90 lines removed); extracted the duplicated EDD-history filter into `shipmentHelpers.js`; removed dead code in `ShipmentCard.jsx` and 2 unused icon exports.
+
+### Still open
+
+**Tier 2 — resiliency gaps:**
+- `track/index.js` and `delete/index.js`'s DynamoDB writes (Get/Put/BatchWrite/Delete) have no retry protection. `src/lib/dynamodbRetry.js`'s `withRetry` exists and is used by `webhook/index.js` only — extend it to the other two handlers.
+- `src/lib/operationTracker.js`: `hadFailures()`/`hadTransientFailures()` treat an unrecorded (`null`) result as a failure (`!null === true`), while `hadPermanentFailures()` correctly checks `=== false`. Inconsistent; currently masked only by webhook's call ordering.
+- `src/lib/dynamodbRetry.js`: unused `params` argument (every call site passes `null`), an unreachable trailing "safety net" return, and a dead AWS-SDK-v2-style `error.code` fallback check (codebase is v3-only, uses `.name`).
+
+**Tier 3 — lower-priority correctness:**
+- `track/index.js` trusts `trackingData.events[0]` as "latest" without sorting first (unlike `isOutForDeliveryEvent`, which explicitly re-sorts since array order isn't guaranteed).
+- Same-timestamp distinct events can silently collapse in `track/index.js`'s `occurred_at`-keyed dedup Map, with no counter/log distinguishing this from a normal duplicate.
+- Frontend `sanitize.js` validation rules (length/charset for tracking number/carrier) don't match the backend's actual regexes in `track/index.js` — a value can pass client-side validation and still get a generic rejection from the API.
+- Two unreachable `.length > 100` validation branches in `App.jsx` (`sanitizeTextField` already truncates to `maxLength` before the check runs).
+- `getLabelGeneratedDate` (`shipmentHelpers.js`) still substring-matches event descriptions to find the label-creation event — the same fragile pattern replaced for OFD detection via `status_detail_code`. No equivalent structured field exists yet to swap in.
+
+**Tier 4 — infra/IAM/CI (higher blast radius, touches live IAM policies and the deploy pipeline):**
+- IAM over-permissioning: `Webhook`/`Track`/`MonitorStaleness` all hold `DynamoDBCrudPolicy` but only ever Get/Update/Query/Put a subset. `MonitorStalenessFunction` is worst — an unauthenticated cron job holding full delete rights over the whole Shipments table. `ListFunction`'s `DynamoDBReadPolicy` is the correct pattern to copy.
+- `deploy.yml`: `Lint Frontend` runs *after* `SAM Deploy` already went live — a lint failure leaves a new backend + stale frontend in production with no rollback.
+- No `AWS::SecretsManager::Secret` resource exists in `template.yaml` for `ParcelTracker/ShipStationApiKey` despite two IAM policies referencing its ARN — it's a manual, undocumented bootstrap step.
+- SAM build cache key (`hashFiles('template.yaml')`) never busts on `src/**` changes.
+- `.env.example` documents wrong table-name env vars and an inaccurate `AWS_REGION` explanation.
+- Deferred, not recommended yet: a GSI for `list`/`monitor-staleness`'s full-table Scans. Correct long-term fix if shipment volume grows, but cheap enough at current (~100 shipment) scale to leave as-is.
+
+---
+
 ## Background
 
 This project grew out of a broader interest in connecting ShipStation's webhook infrastructure to a real tracking UI. It was built incrementally as a learning exercise in AWS SAM, serverless patterns, and API integration — with real ShipStation payloads used during development.
