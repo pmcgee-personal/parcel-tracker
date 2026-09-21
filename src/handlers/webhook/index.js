@@ -20,10 +20,8 @@ const {
 const { getDateOnly, getLocalDateString } = require("../../lib/dates");
 const { withRetry } = require("../../lib/dynamodbRetry");
 const { OperationTracker } = require("../../lib/operationTracker");
-
-const generateRequestId = () => {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-};
+const { generateRequestId } = require("../../lib/http");
+const { sendNtfyNotification } = require("../../lib/ntfy");
 
 // NEW: Helper function to evaluate and send push notifications
 async function sendPushNotification(
@@ -32,15 +30,6 @@ async function sendPushNotification(
   source,
   skipOfdNotification,
 ) {
-  const ntfyUrl = process.env.NTFY_URL;
-
-  if (!ntfyUrl) {
-    console.warn(
-      "NTFY_URL environment variable is not set. Skipping notification.",
-    );
-    return;
-  }
-
   const trackingNumber = data.tracking_number;
   const statusCode = data.status_code;
 
@@ -49,7 +38,7 @@ async function sendPushNotification(
   const isException = statusCode === "EX";
   const isOutForDelivery = isOutForDeliveryEvent(data);
 
-  // NEW: Exit early if we already sent an OFD today for this package
+  // Exit early if we already sent an OFD today for this package
   if (isOutForDelivery && skipOfdNotification) {
     console.log(
       `Duplicate 'Out for Delivery' notification skipped for ${trackingNumber} to prevent spam.`,
@@ -62,7 +51,7 @@ async function sendPushNotification(
     return;
   }
 
-  // 3. Gracefully build the package identification sentence
+  // Gracefully build the package identification sentence
   const packageParts = ["Your"];
   if (direction) packageParts.push(direction.toLowerCase());
   if (source) packageParts.push(source);
@@ -91,24 +80,13 @@ async function sendPushNotification(
     tags = "truck";
   }
 
-  try {
-    const response = await fetch(ntfyUrl, {
-      method: "POST",
-      body: message,
-      headers: {
-        Title: title,
-        Priority: priority,
-        Tags: tags,
-      },
-    });
-
-    if (!response.ok) {
-      console.error(`ntfy responded with HTTP ${response.status}`);
-    } else {
-      console.log(`Successfully sent push notification for ${trackingNumber}`);
-    }
-  } catch (error) {
-    console.error("Failed to send push notification via ntfy:", error);
+  const sent = await sendNtfyNotification(process.env.NTFY_URL, message, {
+    title,
+    priority,
+    tags,
+  });
+  if (sent) {
+    console.log(`Successfully sent push notification for ${trackingNumber}`);
   }
 }
 

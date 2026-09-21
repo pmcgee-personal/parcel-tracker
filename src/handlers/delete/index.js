@@ -1,23 +1,12 @@
 const { GetCommand, DeleteCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
-const {
-  SecretsManagerClient,
-  GetSecretValueCommand,
-} = require("@aws-sdk/client-secrets-manager");
 const { docClient, SHIPMENTS_TABLE, EVENTS_TABLE } = require("../../lib/ddb");
-
-const generateRequestId = () => {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-};
-
-const secretsClient = new SecretsManagerClient({
-  region: process.env.AWS_REGION,
-});
+const { generateRequestId, makeJsonResponse } = require("../../lib/http");
+const { fetchWithRetry } = require("../../lib/fetchWithRetry");
+const { getShipStationApiKey } = require("../../lib/secrets");
+const { sendNtfyNotification: sendNtfy } = require("../../lib/ntfy");
 
 const SECRET_NAME = process.env.SECRET_NAME;
 const NTFY_URL = process.env.NTFY_URL;
-
-let cachedApiKey = null;
-let cachedApiKeyExpiry = 0;
 
 const RESPONSE_HEADERS = {
   "Content-Type": "application/json",
@@ -27,97 +16,20 @@ const RESPONSE_HEADERS = {
   "X-Robots-Tag": "noindex, nofollow",
 };
 
-const jsonResponse = (statusCode, body) => ({
-  statusCode,
-  headers: RESPONSE_HEADERS,
-  body: JSON.stringify(body),
-});
-
-// Retrieve and cache the ShipStation API key
-const getApiKey = async () => {
-  const now = Date.now();
-  if (cachedApiKey && cachedApiKeyExpiry > now) {
-    return cachedApiKey;
-  }
-
-  try {
-    const response = await secretsClient.send(
-      new GetSecretValueCommand({ SecretId: SECRET_NAME }),
-    );
-    const secret = JSON.parse(response.SecretString);
-    if (!secret.ShipStationApiKey) {
-      throw new Error(
-        `Secret '${SECRET_NAME}' is missing the 'ShipStationApiKey' field`,
-      );
-    }
-    cachedApiKey = secret.ShipStationApiKey;
-    cachedApiKeyExpiry = now + 3600000; // Cache for 1 hour
-    return cachedApiKey;
-  } catch (error) {
-    console.error("Failed to retrieve API key from Secrets Manager:", error);
-    throw new Error("Internal Server Error: Unable to retrieve API key");
-  }
-};
+const jsonResponse = makeJsonResponse(RESPONSE_HEADERS);
 
 // Allowed statuses for deletion: NY (Not Yet In System), AC (Accepted), IT (In Transit)
 const DELETABLE_STATUSES = new Set(["NY", "AC", "IT"]);
 
-const fetchWithRetry = async (url, options, maxAttempts = 3) => {
-  const delays = [1000, 2000, 4000];
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const response = await fetch(url, options);
-
-      if (response.ok) {
-        return response;
-      }
-
-      const isRetryable = response.status >= 500 || response.status === 429;
-      if (!isRetryable || attempt === maxAttempts - 1) {
-        return response;
-      }
-
-      console.warn(
-        `[fetchWithRetry] Attempt ${attempt + 1} failed with ${response.status}, retrying in ${delays[attempt]}ms`,
-      );
-
-      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
-    } catch (error) {
-      if (attempt === maxAttempts - 1) {
-        throw error;
-      }
-
-      console.warn(
-        `[fetchWithRetry] Attempt ${attempt + 1} failed with network error, retrying in ${delays[attempt]}ms`,
-      );
-
-      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
-    }
-  }
-};
-
-// Send ntfy notification
-const sendNtfyNotification = async (message) => {
-  if (!NTFY_URL) {
-    console.warn("NTFY_URL not configured, skipping notification");
-    return;
-  }
-
-  try {
-    await fetch(NTFY_URL, {
-      method: "POST",
-      body: message,
-      headers: {
-        Title: "Parcel Tracker Alert",
-        Priority: "high",
-        Tags: "warning",
-      },
-    });
-  } catch (error) {
-    console.error("Failed to send ntfy notification:", error);
-  }
-};
+// Send ntfy notification about a webhook stop failure. Return value is
+// intentionally ignored at call sites: this fires from an already-degraded
+// path (ShipEngine stop-tracking failed) and has no further fallback.
+const sendNtfyNotification = (message) =>
+  sendNtfy(NTFY_URL, message, {
+    title: "Parcel Tracker Alert",
+    priority: "high",
+    tags: "warning",
+  });
 
 // Delete all events for a tracking number
 const deleteEvents = async (trackingNumber, requestId) => {
@@ -241,7 +153,7 @@ exports.handler = async (event) => {
       );
       shipEngineError = "Shipment missing carrier (cannot stop webhooks)";
     } else {
-      const apiKey = await getApiKey();
+      const apiKey = await getShipStationApiKey(SECRET_NAME);
       const stopTrackingUrl = `https://api.shipengine.com/v1/tracking/stop?carrier_code=${encodeURIComponent(carrier)}&tracking_number=${encodeURIComponent(trackingNumber)}`;
 
       console.log(

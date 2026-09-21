@@ -5,10 +5,7 @@ const {
   scanAll,
   queryEventsForTracking,
 } = require("../../lib/ddb");
-
-const generateRequestId = () => {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-};
+const { generateRequestId, makeJsonResponse } = require("../../lib/http");
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 50;
@@ -18,6 +15,8 @@ const RESPONSE_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "X-Robots-Tag": "noindex, nofollow",
 };
+
+const jsonResponse = makeJsonResponse(RESPONSE_HEADERS);
 
 exports.handler = async (event) => {
   const requestId = generateRequestId();
@@ -87,28 +86,20 @@ exports.handler = async (event) => {
 
     console.log(`[${requestId}] Successfully fetched and formatted data`);
 
-    return {
-      statusCode: 200,
-      headers: RESPONSE_HEADERS,
-      body: JSON.stringify({
-        shipments: shipmentsWithEvents,
-        pagination: {
-          page,
-          pageSize,
-          totalItems,
-          totalPages,
-        },
-      }),
-    };
+    return jsonResponse(200, {
+      shipments: shipmentsWithEvents,
+      pagination: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages,
+      },
+    });
   } catch (error) {
     console.error(`[${requestId}] Error retrieving shipments:`, error.message);
-    return {
-      statusCode: 500,
-      headers: RESPONSE_HEADERS,
-      body: JSON.stringify({
-        message: "Internal Server Error",
-        requestId,
-      }),
-    };
+    return jsonResponse(500, {
+      message: "Internal Server Error",
+      requestId,
+    });
   }
 };

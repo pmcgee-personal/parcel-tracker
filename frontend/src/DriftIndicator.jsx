@@ -1,5 +1,7 @@
 import { useState } from "react";
 import PropTypes from "prop-types";
+import { AlertCircleIcon, ArrowDownIcon, ArrowUpIcon } from "./components/icons";
+import { filterHistoryExcludingDate } from "./utils/shipmentHelpers";
 
 export const EstimatedDeliveryWithHistory = ({ shipment }) => {
   const [showTooltip, setShowTooltip] = useState(false);
@@ -8,17 +10,9 @@ export const EstimatedDeliveryWithHistory = ({ shipment }) => {
     return <span className="text-slate-500">—</span>;
   }
 
-  const currentEddDate = shipment.estimatedDeliveryDate
-    ? shipment.estimatedDeliveryDate.split("T")[0]
-    : null;
-
-  const filteredHistory = (shipment.estimatedDeliveryHistory || []).filter(
-    (historyItem) => {
-      const historyDate = historyItem.date
-        ? historyItem.date.split("T")[0]
-        : null;
-      return historyDate && historyDate !== currentEddDate;
-    },
+  const filteredHistory = filterHistoryExcludingDate(
+    shipment.estimatedDeliveryHistory,
+    shipment.estimatedDeliveryDate,
   );
 
   const formattedCurrentDate = new Date(
@@ -52,57 +46,18 @@ export const EstimatedDeliveryWithHistory = ({ shipment }) => {
   let iconColor = "text-amber-400 hover:text-amber-300";
   let titleColor = "text-amber-400";
   let driftText = "Date Changed";
-  let IconSVG = (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-      className="w-4 h-4"
-    >
-      <path
-        fillRule="evenodd"
-        d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
+  let IconSVG = <AlertCircleIcon />;
 
   if (currentTimestamp > originalTimestamp) {
     iconColor = "text-rose-400 hover:text-rose-300";
     titleColor = "text-rose-400";
     driftText = "Delivery Delayed";
-    IconSVG = (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        className="w-4 h-4"
-      >
-        <path
-          fillRule="evenodd"
-          d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v4.59L7.3 9.24a.75.75 0 0 0-1.1 1.02l3.25 3.5a.75.75 0 0 0 1.1 0l3.25-3.5a.75.75 0 1 0-1.1-1.02l-1.95 2.1V6.75Z"
-          clipRule="evenodd"
-        />
-      </svg>
-    );
+    IconSVG = <ArrowDownIcon />;
   } else if (currentTimestamp < originalTimestamp) {
     iconColor = "text-emerald-400 hover:text-emerald-300";
     titleColor = "text-emerald-400";
     driftText = "Arriving Early";
-    IconSVG = (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        className="w-4 h-4"
-      >
-        <path
-          fillRule="evenodd"
-          d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-.75-4.75a.75.75 0 0 0 1.5 0V8.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0L6.2 9.74a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z"
-          clipRule="evenodd"
-        />
-      </svg>
-    );
+    IconSVG = <ArrowUpIcon />;
   }
 
   return (
@@ -168,13 +123,10 @@ export const DeliveredOnWithDrift = ({ shipment }) => {
 
   const originalEdd = shipment.estimatedDeliveryDate
     ? (() => {
-        const currentEddDate = shipment.estimatedDeliveryDate.split("T")[0];
-        const filteredHistory = history.filter((historyItem) => {
-          const historyDate = historyItem.date
-            ? historyItem.date.split("T")[0]
-            : null;
-          return historyDate && historyDate !== currentEddDate;
-        });
+        const filteredHistory = filterHistoryExcludingDate(
+          history,
+          shipment.estimatedDeliveryDate,
+        );
         return filteredHistory.length > 0
           ? filteredHistory[0].date
           : shipment.estimatedDeliveryDate;
@@ -211,39 +163,13 @@ export const DeliveredOnWithDrift = ({ shipment }) => {
           iconColor: "text-rose-400 hover:text-rose-300",
           titleColor: "text-rose-400",
           driftText: "Delivered Late",
-          IconSVG: (
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              className="w-4 h-4"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v4.59L7.3 9.24a.75.75 0 0 0-1.1 1.02l3.25 3.5a.75.75 0 0 0 1.1 0l3.25-3.5a.75.75 0 1 0-1.1-1.02l-1.95 2.1V6.75Z"
-                clipRule="evenodd"
-              />
-            </svg>
-          ),
+          IconSVG: <ArrowDownIcon />,
         }
       : {
           iconColor: "text-emerald-400 hover:text-emerald-300",
           titleColor: "text-emerald-400",
           driftText: "Delivered Early",
-          IconSVG: (
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              className="w-4 h-4"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-.75-4.75a.75.75 0 0 0 1.5 0V8.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0L6.2 9.74a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z"
-                clipRule="evenodd"
-              />
-            </svg>
-          ),
+          IconSVG: <ArrowUpIcon />,
         };
 
   return (

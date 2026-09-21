@@ -14,6 +14,18 @@ export const getStatusStyle = (code) => {
   }
 };
 
+// Filter delivery-date history entries down to those whose calendar day
+// differs from `currentDate` (both ISO strings). Used to find the
+// "original" estimated delivery date before any subsequent carrier
+// reschedule, ignoring history entries that just repeat the current date.
+export const filterHistoryExcludingDate = (history, currentDate) => {
+  const currentDay = currentDate ? currentDate.split("T")[0] : null;
+  return (history || []).filter((historyItem) => {
+    const historyDay = historyItem.date ? historyItem.date.split("T")[0] : null;
+    return historyDay && historyDay !== currentDay;
+  });
+};
+
 export const getLabelGeneratedDate = (shipment) => {
   const events = shipment.events || [];
 

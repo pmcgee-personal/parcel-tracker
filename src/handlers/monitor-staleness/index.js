@@ -1,13 +1,6 @@
 const { UpdateCommand } = require("@aws-sdk/lib-dynamodb");
-const {
-  SecretsManagerClient,
-  GetSecretValueCommand,
-} = require("@aws-sdk/client-secrets-manager");
 const { docClient, SHIPMENTS_TABLE, scanAll } = require("../../lib/ddb");
-
-const secretsClient = new SecretsManagerClient({
-  region: process.env.AWS_REGION,
-});
+const { sendNtfyNotification: sendNtfy } = require("../../lib/ntfy");
 
 const NTFY_URL = process.env.NTFY_URL;
 const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 hours
@@ -139,41 +132,12 @@ async function monitorStaleness() {
 
 // Send ntfy notification. Returns true only when the push was actually
 // delivered — callers must not treat a falsy return as "handled".
-async function sendNtfyNotification(message) {
-  if (!NTFY_URL) {
-    console.warn("NTFY_URL not configured, skipping notification");
-    return false;
-  }
-
-  try {
-    const response = await fetch(NTFY_URL, {
-      method: "POST",
-      body: message,
-      headers: {
-        // HTTP header values must be Latin-1 (ByteString) — undici's fetch
-        // throws synchronously on a non-Latin-1 character (e.g. an emoji)
-        // here, before the request is ever sent. Keep these ASCII-only;
-        // any visual flair belongs in the body above, which has no such
-        // restriction.
-        Title: "No Events",
-        Priority: "default",
-        Tags: "hourglass",
-      },
-    });
-
-    if (!response.ok) {
-      console.warn(
-        `Failed to send ntfy notification: HTTP ${response.status}`,
-      );
-      return false;
-    }
-
-    console.log("ntfy notification sent successfully");
-    return true;
-  } catch (error) {
-    console.error("Error sending ntfy notification:", error);
-    return false;
-  }
+function sendNtfyNotification(message) {
+  return sendNtfy(NTFY_URL, message, {
+    title: "No Events",
+    priority: "default",
+    tags: "hourglass",
+  });
 }
 
 // Lambda handler

@@ -1,9 +1,5 @@
 const { PutCommand, GetCommand } = require("@aws-sdk/lib-dynamodb");
 const {
-  SecretsManagerClient,
-  GetSecretValueCommand,
-} = require("@aws-sdk/client-secrets-manager");
-const {
   docClient,
   SHIPMENTS_TABLE,
   EVENTS_TABLE,
@@ -15,14 +11,9 @@ const {
   dedupeIncomingEvents,
 } = require("../../lib/events");
 const { getDateOnly } = require("../../lib/dates");
-
-const generateRequestId = () => {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-};
-
-const secretsClient = new SecretsManagerClient({
-  region: process.env.AWS_REGION,
-});
+const { generateRequestId, makeJsonResponse } = require("../../lib/http");
+const { fetchWithRetry } = require("../../lib/fetchWithRetry");
+const { getShipStationApiKey } = require("../../lib/secrets");
 
 const SECRET_NAME = process.env.SECRET_NAME;
 
@@ -34,70 +25,7 @@ const RESPONSE_HEADERS = {
   "X-Robots-Tag": "noindex, nofollow",
 };
 
-const jsonResponse = (statusCode, body) => ({
-  statusCode,
-  headers: RESPONSE_HEADERS,
-  body: JSON.stringify(body),
-});
-
-// Retry helper with exponential backoff for transient failures
-const fetchWithRetry = async (url, options, maxAttempts = 3) => {
-  const delays = [1000, 2000, 4000]; // 1s, 2s, 4s
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const response = await fetch(url, options);
-
-      // Success - return the response
-      if (response.ok) {
-        return response;
-      }
-
-      // Retry on 5xx errors (server errors) and 429 (rate limit)
-      const isRetryable = response.status >= 500 || response.status === 429;
-      if (!isRetryable || attempt === maxAttempts - 1) {
-        // Non-retryable error or last attempt - return the error response
-        return response;
-      }
-
-      // Log the retry attempt
-      console.warn(
-        `[fetchWithRetry] Attempt ${attempt + 1} failed with ${response.status}, retrying in ${delays[attempt]}ms`,
-      );
-
-      // Wait before retrying
-      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
-    } catch (error) {
-      // Network error - retry if not the last attempt
-      if (attempt === maxAttempts - 1) {
-        throw error;
-      }
-
-      console.warn(
-        `[fetchWithRetry] Attempt ${attempt + 1} failed with network error, retrying in ${delays[attempt]}ms`,
-      );
-
-      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
-    }
-  }
-};
-
-let shipStationApiKey = null;
-
-const getApiKey = async () => {
-  if (shipStationApiKey) return shipStationApiKey;
-  console.log("Fetching API key from Secrets Manager...");
-  const command = new GetSecretValueCommand({ SecretId: SECRET_NAME });
-  const response = await secretsClient.send(command);
-  const secret = JSON.parse(response.SecretString);
-  if (!secret.ShipStationApiKey) {
-    throw new Error(
-      `Secret '${SECRET_NAME}' is missing the 'ShipStationApiKey' field`,
-    );
-  }
-  shipStationApiKey = secret.ShipStationApiKey;
-  return shipStationApiKey;
-};
+const jsonResponse = makeJsonResponse(RESPONSE_HEADERS);
 
 exports.handler = async (event) => {
   const requestId = generateRequestId();
@@ -140,7 +68,7 @@ exports.handler = async (event) => {
       });
     }
 
-    const apiKey = await getApiKey();
+    const apiKey = await getShipStationApiKey(SECRET_NAME);
 
     console.log(
       `[${requestId}] Registering ${trackingNumber} via carrier ${carrier}`,

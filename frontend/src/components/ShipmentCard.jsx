@@ -18,15 +18,8 @@ export default function ShipmentCard({
   getStatusStyle,
   getLabelGeneratedDate,
 }) {
-  // occurredAt is always present (dedupeIncomingEvents drops events lacking
-  // it before write); carrierOccurredAt is legitimately nullable and must
-  // not be used as a sort key, or a null value collapses to the Unix epoch.
-  const sortedEvents = [...(shipment.events || [])].sort(
-    (a, b) => new Date(b.occurredAt) - new Date(a.occurredAt)
-  );
-
   return (
-    <React.Fragment key={shipment.trackingNumber}>
+    <React.Fragment>
       <tr
         className={`hover:bg-slate-700/30 transition-colors ${
           isExpanded ? "bg-slate-800/30" : ""
@@ -140,7 +133,7 @@ export default function ShipmentCard({
       {isExpanded && (
         <tr className="bg-slate-900/60 border-t border-b border-slate-800/80">
           <td colSpan={10} className="px-8 py-5">
-            <EventTimeline events={sortedEvents} />
+            <EventTimeline events={shipment.events || []} />
           </td>
         </tr>
       )}

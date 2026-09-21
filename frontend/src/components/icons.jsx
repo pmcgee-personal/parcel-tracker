@@ -69,21 +69,6 @@ export const RefreshIcon = ({ className = "h-4 w-4", animated = false }) => (
   </svg>
 );
 
-export const InfoCircleIcon = ({ className = "w-4 h-4" }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 20 20"
-    fill="currentColor"
-    className={className}
-  >
-    <path
-      fillRule="evenodd"
-      d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM9 9a1 1 0 0 0 0 2v3a1 1 0 0 0 1 1h1a1 1 0 1 0 0-2v-3a1 1 0 0 0-1-1H9z"
-      clipRule="evenodd"
-    />
-  </svg>
-);
-
 export const ArrowDownIcon = ({ className = "w-4 h-4" }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -129,17 +114,3 @@ export const AlertCircleIcon = ({ className = "w-4 h-4" }) => (
   </svg>
 );
 
-export const CheckCircleIcon = ({ className = "w-4 h-4" }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 20 20"
-    fill="currentColor"
-    className={className}
-  >
-    <path
-      fillRule="evenodd"
-      d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
-      clipRule="evenodd"
-    />
-  </svg>
-);
