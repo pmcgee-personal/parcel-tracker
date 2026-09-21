@@ -339,15 +339,17 @@ The webhook handler sends notifications on delivery, exception, and out-for-deli
 
 - **`NtfyUrl`** — the ntfy channel URL, passed as a CloudFormation parameter (`NoEcho`), injected from the `NTFY_URL` GitHub secret in CI.
 - **`APP_TIMEZONE`** — timezone used to decide the "calendar day" for the once-per-day out-for-delivery dedup (default `America/Los_Angeles`, set in `template.yaml`). Lambda runs in UTC, so this prevents a late-evening event from being attributed to the next day.
+- **Out-for-delivery detection** uses ShipEngine's normalized `status_detail_code === "OUT_FOR_DELIVERY"` (checked at both the top level and the latest event), aligned across USPS/UPS/FedEx as of September 2026. No carrier-description text matching is used.
 
 ### Stale Shipment Notifications (Scheduled)
-A scheduled Lambda function (`monitor-staleness`) runs periodically to detect shipments without updates for 48+ hours and sends a single ntfy notification with tracking numbers. 
+A scheduled Lambda function (`monitor-staleness`) runs every 6 hours (`cron(0 */6 * * ? *)` in `template.yaml`) to detect shipments without updates for 48+ hours and sends a single ntfy notification listing their tracking numbers.
 
 - Filters to **active statuses only**: accepted, in transit, exception (excludes delivered/cancelled)
-- Respects a **24-hour cooldown** to avoid notification spam
-- Notification format: `"2 shipment(s) without updates: ABC123, DEF456"` (clean, actionable tracking numbers)
+- Respects a **24-hour cooldown** to avoid notification spam — `lastStaleNotificationAt` is only stamped after a *confirmed successful* ntfy send, so a failed send (network error, ntfy outage, a bad header) retries on the next 6-hourly run instead of silently going quiet
+- Notification format: `"⏳ No events for 2 shipment(s): ABC123, DEF456"`
+- ntfy header values (`Title`/`Priority`/`Tags`) must stay ASCII/Latin-1 — HTTP headers can't carry emoji or other non-Latin-1 characters; put those in the message body instead. (A `Title` with an emoji silently broke every stale-shipment push for a week — see `test/monitor-staleness.test.js`'s header-safety regression test.)
 
-To enable this, ensure your GitHub Actions secrets include `NTFY_URL` and the CloudFormation template defines a CloudWatch Events trigger for the monitor-staleness function (typically daily).
+To enable this, ensure your GitHub Actions secrets include `NTFY_URL`.
 
 ---
 
@@ -386,6 +388,7 @@ sam logs -n MonitorStalenessFunction --stack-name parcel-tracker-stack --tail
 - Confirm `NTFY_URL` is set and the ntfy channel is accessible
 - Check that at least one shipment has `statusDescription` matching "accepted", "in transit", or "exception" with no updates for 48+ hours
 - Verify the 24-hour notification cooldown is not active for the shipment
+- Check CloudWatch logs (`MonitorStalenessFunction`) for `Error sending ntfy notification` — a non-Latin-1 character in a header (e.g. an emoji in `Title`) crashes the request before it's sent
 
 ---
 
