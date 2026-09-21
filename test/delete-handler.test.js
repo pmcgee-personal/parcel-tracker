@@ -322,3 +322,52 @@ test("Delete handler - allows NY (Not Yet In System) status", async () => {
 
   assert.equal(response.statusCode, 200, "Should allow NY status deletion");
 });
+
+test("Delete handler - shipment record is NOT deleted when event deletion fails (ordering regression)", async () => {
+  const shipment = {
+    trackingNumber: "ORDER123",
+    carrier: "ups",
+    statusCode: "IT",
+    statusDescription: "In Transit",
+  };
+
+  const events = [
+    { trackingNumber: "ORDER123", occurredAt: "2026-01-01T10:00:00Z" },
+  ];
+
+  let shipmentDeleteCalled = false;
+
+  mockDocClient.send = async (command) => {
+    if (command.constructor.name === "GetCommand") {
+      return { Item: shipment };
+    }
+    if (command.constructor.name === "QueryCommand") {
+      return { Items: events };
+    }
+    if (command.constructor.name === "DeleteCommand") {
+      if (!command.params.Key.occurredAt) {
+        // The shipment-row delete (its Key has no occurredAt).
+        shipmentDeleteCalled = true;
+        return {};
+      }
+      // Simulate the event delete failing.
+      throw new Error("Simulated transient DynamoDB failure");
+    }
+    return {};
+  };
+
+  global.fetch = async () => ({ ok: true, status: 200 });
+
+  const event = {
+    pathParameters: { trackingNumber: "ORDER123" },
+  };
+
+  const response = await handler(event);
+
+  assert.equal(response.statusCode, 500, "Should surface the failure");
+  assert.equal(
+    shipmentDeleteCalled,
+    false,
+    "Shipment row must not be deleted when event deletion fails — orphaning events under an already-deleted shipment is worse than leaving the shipment intact for a retry",
+  );
+});

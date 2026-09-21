@@ -18,9 +18,11 @@ export default function ShipmentCard({
   getStatusStyle,
   getLabelGeneratedDate,
 }) {
+  // occurredAt is always present (dedupeIncomingEvents drops events lacking
+  // it before write); carrierOccurredAt is legitimately nullable and must
+  // not be used as a sort key, or a null value collapses to the Unix epoch.
   const sortedEvents = [...(shipment.events || [])].sort(
-    (a, b) =>
-      new Date(b.carrierOccurredAt) - new Date(a.carrierOccurredAt)
+    (a, b) => new Date(b.occurredAt) - new Date(a.occurredAt)
   );
 
   return (
@@ -137,7 +139,7 @@ export default function ShipmentCard({
       {/* Expanded History Row */}
       {isExpanded && (
         <tr className="bg-slate-900/60 border-t border-b border-slate-800/80">
-          <td colSpan={9} className="px-8 py-5">
+          <td colSpan={10} className="px-8 py-5">
             <EventTimeline events={sortedEvents} />
           </td>
         </tr>
@@ -160,8 +162,9 @@ ShipmentCard.propTypes = {
     lastEventTimestamp: PropTypes.string,
     events: PropTypes.arrayOf(
       PropTypes.shape({
-        carrierOccurredAt: PropTypes.string.isRequired,
-        description: PropTypes.string.isRequired,
+        occurredAt: PropTypes.string.isRequired,
+        carrierOccurredAt: PropTypes.string,
+        description: PropTypes.string,
         cityLocality: PropTypes.string,
         stateProvince: PropTypes.string,
         countryCode: PropTypes.string,

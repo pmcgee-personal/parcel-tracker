@@ -216,6 +216,12 @@ exports.handler = async (event) => {
       });
     }
 
+    // Delete events first: if this throws, the shipment row is left intact
+    // so the client's error response is accurate and the delete can be
+    // safely retried, instead of orphaning event rows under a shipment that
+    // already looks deleted.
+    await deleteEvents(trackingNumber, requestId);
+
     // Delete from Shipments table
     const deleteShipmentCommand = new DeleteCommand({
       TableName: SHIPMENTS_TABLE,
@@ -224,9 +230,6 @@ exports.handler = async (event) => {
 
     await docClient.send(deleteShipmentCommand);
     console.log(`[${requestId}] Deleted shipment record: ${trackingNumber}`);
-
-    // Delete all associated events
-    await deleteEvents(trackingNumber, requestId);
 
     // Attempt to stop tracking webhooks on ShipEngine (only if carrier is present)
     const carrier = shipment.carrier;

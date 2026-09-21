@@ -38,11 +38,14 @@ export default function EventTimeline({ events }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800 bg-transparent">
+            {/* occurredAt is always present; carrierOccurredAt is legitimately
+                nullable and must not be used as a sort key, or a null value
+                collapses to the Unix epoch. */}
             {[...events]
               .sort((a, b) =>
                 sortAsc
-                  ? new Date(a.carrierOccurredAt) - new Date(b.carrierOccurredAt)
-                  : new Date(b.carrierOccurredAt) - new Date(a.carrierOccurredAt)
+                  ? new Date(a.occurredAt) - new Date(b.occurredAt)
+                  : new Date(b.occurredAt) - new Date(a.occurredAt)
               )
               .map((event, index) => {
               const location =
@@ -57,7 +60,9 @@ export default function EventTimeline({ events }) {
                   className="hover:bg-slate-800/20 transition-colors"
                 >
                   <td className="px-5 py-3 whitespace-nowrap text-slate-400 font-mono text-xs">
-                    {new Date(event.carrierOccurredAt).toLocaleString()}
+                    {event.carrierOccurredAt || event.occurredAt
+                      ? new Date(event.carrierOccurredAt || event.occurredAt).toLocaleString()
+                      : "—"}
                   </td>
                   <td className="px-5 py-3 text-slate-200 font-medium text-xs">
                     {event.description}
@@ -82,8 +87,9 @@ export default function EventTimeline({ events }) {
 EventTimeline.propTypes = {
   events: PropTypes.arrayOf(
     PropTypes.shape({
-      carrierOccurredAt: PropTypes.string.isRequired,
-      description: PropTypes.string.isRequired,
+      occurredAt: PropTypes.string.isRequired,
+      carrierOccurredAt: PropTypes.string,
+      description: PropTypes.string,
       cityLocality: PropTypes.string,
       stateProvince: PropTypes.string,
       countryCode: PropTypes.string,
