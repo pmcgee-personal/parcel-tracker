@@ -138,13 +138,13 @@ App.jsx (main container)
 
 ### Components
 
-| Component | Lines | Purpose |
-|-----------|-------|---------|
-| **App.jsx** | 423 | Main state container, data fetching, pagination, form validation |
-| **ShipmentForm.jsx** | 117 | Form for adding tracking numbers, refresh button, messaging |
-| **ShipmentCard.jsx** | 167 | Individual shipment row with expand/collapse, all table columns |
-| **EventTimeline.jsx** | 64 | Pure presentational component for tracking events table |
-| **DriftIndicator.jsx** | 250 | Delivery date drift indicators (separate file) |
+| Component              | Lines | Purpose                                                          |
+| ---------------------- | ----- | ---------------------------------------------------------------- |
+| **App.jsx**            | 423   | Main state container, data fetching, pagination, form validation |
+| **ShipmentForm.jsx**   | 117   | Form for adding tracking numbers, refresh button, messaging      |
+| **ShipmentCard.jsx**   | 167   | Individual shipment row with expand/collapse, all table columns  |
+| **EventTimeline.jsx**  | 64    | Pure presentational component for tracking events table          |
+| **DriftIndicator.jsx** | 250   | Delivery date drift indicators (separate file)                   |
 
 ### Design Decisions
 
@@ -212,17 +212,16 @@ Stack outputs include `FrontendBucketName`, `CloudFrontDistributionId`, `CloudFr
 
 All endpoints are available under the API Gateway `Prod` stage. URLs are printed in stack outputs after deployment.
 
-| Method | Path       | Function        | Description                      | Auth                       |
-| ------ | ---------- | --------------- | -------------------------------- | -------------------------- |
-| POST   | `/webhook` | WebhookFunction | Ingests a carrier tracking event | ShipEngine RSA signature   |
-| POST   | `/track`   | TrackFunction   | Registers a new tracking number  | API key (`x-api-key`)      |
-| GET    | `/track`   | ListFunction    | Returns all tracked shipments    | API key (`x-api-key`)      |
+| Method | Path       | Function        | Description                      | Auth                     |
+| ------ | ---------- | --------------- | -------------------------------- | ------------------------ |
+| POST   | `/webhook` | WebhookFunction | Ingests a carrier tracking event | ShipEngine RSA signature |
+| POST   | `/track`   | TrackFunction   | Registers a new tracking number  | API key (`x-api-key`)    |
+| GET    | `/track`   | ListFunction    | Returns all tracked shipments    | API key (`x-api-key`)    |
 
 ### Authentication
 
 - **`/webhook`** verifies the `x-shipengine-rsa-sha256-*` signature headers against ShipEngine's published JWKS (`https://api.shipengine.com/jwks`). Requests with missing/invalid signatures or stale timestamps (>5 min) are rejected. For local testing with unsigned payloads, set `WEBHOOK_VERIFY_DISABLED=true` (local only — never in a deployment).
 - **`/track`** (GET + POST) requires an API key, enforced via an API Gateway usage plan that also throttles and quota-limits requests to protect the paid ShipEngine quota. The key is generated on deploy and exposed (by ID) via the `ApiKeyId` stack output.
-
   - **CI deploys** (`.github/workflows/deploy.yml`): handled automatically — the workflow reads `ApiKeyId` from the stack, resolves the value, and builds the frontend with `VITE_API_KEY`. Just push to `main`.
   - **Local dev** (`npm run dev`): fetch the value once and put it in `frontend/.env.local` as `VITE_API_KEY=...`:
 
@@ -289,6 +288,7 @@ npm test        # or: node --test
 ```
 
 These run automatically in CI before any deploy, so a failing test blocks the deployment. Test files:
+
 - `test/batch.test.js` — BatchWrite chunking and retry logic
 - `test/dates.test.js` — Timezone-aware date utilities
 - `test/events.test.js` — Event item builder
@@ -335,6 +335,7 @@ The Lambda is granted `AWSSecretsManagerGetSecretValuePolicy` scoped to this exa
 The system sends push notifications via [ntfy](https://ntfy.sh/) in two scenarios:
 
 ### Immediate Notifications (Webhook)
+
 The webhook handler sends notifications on delivery, exception, and out-for-delivery events. Configuration:
 
 - **`NtfyUrl`** — the ntfy channel URL, passed as a CloudFormation parameter (`NoEcho`), injected from the `NTFY_URL` GitHub secret in CI.
@@ -342,10 +343,11 @@ The webhook handler sends notifications on delivery, exception, and out-for-deli
 - **Out-for-delivery detection** uses ShipEngine's normalized `status_detail_code === "OUT_FOR_DELIVERY"` (checked at both the top level and the latest event), aligned across USPS/UPS/FedEx as of September 2026. No carrier-description text matching is used.
 
 ### Stale Shipment Notifications (Scheduled)
+
 A scheduled Lambda function (`monitor-staleness`) runs every 6 hours (`cron(0 */6 * * ? *)` in `template.yaml`) to detect shipments without updates for 48+ hours and sends a single ntfy notification listing their tracking numbers.
 
 - Filters to **active statuses only**: accepted, in transit, exception (excludes delivered/cancelled)
-- Respects a **24-hour cooldown** to avoid notification spam — `lastStaleNotificationAt` is only stamped after a *confirmed successful* ntfy send, so a failed send (network error, ntfy outage, a bad header) retries on the next 6-hourly run instead of silently going quiet
+- Respects a **24-hour cooldown** to avoid notification spam — `lastStaleNotificationAt` is only stamped after a _confirmed successful_ ntfy send, so a failed send (network error, ntfy outage, a bad header) retries on the next 6-hourly run instead of silently going quiet
 - Notification format: `"⏳ No events for 2 shipment(s): ABC123, DEF456"`
 - ntfy header values (`Title`/`Priority`/`Tags`) must stay ASCII/Latin-1 — HTTP headers can't carry emoji or other non-Latin-1 characters; put those in the message body instead. (A `Title` with an emoji silently broke every stale-shipment push for a week — see `test/monitor-staleness.test.js`'s header-safety regression test.)
 
@@ -370,21 +372,25 @@ sam logs -n MonitorStalenessFunction --stack-name parcel-tracker-stack --tail
 ### Common Issues
 
 **Webhook signature verification fails:**
+
 - Ensure `WEBHOOK_VERIFY_DISABLED` is not set in production
 - Verify the `NTFY_URL` is correct in CloudFormation parameters
 - Check that ShipEngine is configured to post to the correct endpoint
 
 **API requests return 403 Unauthorized:**
+
 - Confirm the API key is valid: `aws apigateway get-api-key --api-key <ApiKeyId> --include-value --query value --output text`
 - Verify the key is passed in the `x-api-key` header
 - Check that the usage plan quota hasn't been exceeded
 
 **Frontend shows "Could not load shipments":**
+
 - Verify the API URL and key in browser dev tools (Network tab)
 - Check Lambda logs for errors in ListFunction
 - Ensure DynamoDB tables have data (webhook events were processed)
 
 **Stale shipment notifications not received:**
+
 - Confirm `NTFY_URL` is set and the ntfy channel is accessible
 - Check that at least one shipment has `statusDescription` matching "accepted", "in transit", or "exception" with no updates for 48+ hours
 - Verify the 24-hour notification cooldown is not active for the shipment
@@ -413,45 +419,6 @@ To also remove the tables, delete them manually in the AWS Console or via CLI af
 3. **Frontend build + sync** — reads the stack outputs (`ListApiUrl`, `FrontendBucketName`, `CloudFrontDistributionId`, `ApiKeyId`), resolves the API key value, builds the SPA with `VITE_API_BASE_URL`/`VITE_API_KEY`, syncs to S3, and invalidates CloudFront.
 
 Required GitHub secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `NTFY_URL`.
-
----
-
-## Known Issues / Technical Debt Backlog
-
-From a full-project review on 2026-09-21. Findings were grouped into tiers by severity/risk; this section tracks what's done and what's still open so a future session can resume without re-deriving the analysis.
-
-### Done (2026-09-21)
-
-**Tier 0 — correctness bugs:**
-- `delete/index.js` deleted the shipment row before its events; a partial failure orphaned events under an already-"deleted" shipment and returned a misleading 500. Reordered: events delete first, so a failure leaves the shipment intact for retry.
-- `ShipmentCard.jsx`'s expanded-row `colSpan={9}` was one short of the table's actual 10 columns.
-- `ShipmentCard.jsx`/`EventTimeline.jsx` sorted and displayed events by `carrierOccurredAt`, which is legitimately nullable — `new Date(null)` collapsed to the Unix epoch. Switched to the guaranteed-non-null `occurredAt` for sorting, with `carrierOccurredAt || occurredAt` for display.
-
-**Tier 1 — consolidation:**
-- Extracted `src/lib/http.js`, `src/lib/ntfy.js`, `src/lib/fetchWithRetry.js`, `src/lib/secrets.js`, replacing duplicated `generateRequestId` (4 copies), `sendNtfyNotification` (3 copies), `fetchWithRetry` (2 verbatim copies), and inconsistent API-key TTL caching across `track`/`delete`/`list`/`webhook`/`monitor-staleness`.
-- Frontend: `DriftIndicator.jsx` now imports icons from `icons.jsx` instead of reimplementing them (~90 lines removed); extracted the duplicated EDD-history filter into `shipmentHelpers.js`; removed dead code in `ShipmentCard.jsx` and 2 unused icon exports.
-
-### Still open
-
-**Tier 2 — resiliency gaps:**
-- `track/index.js` and `delete/index.js`'s DynamoDB writes (Get/Put/BatchWrite/Delete) have no retry protection. `src/lib/dynamodbRetry.js`'s `withRetry` exists and is used by `webhook/index.js` only — extend it to the other two handlers.
-- `src/lib/operationTracker.js`: `hadFailures()`/`hadTransientFailures()` treat an unrecorded (`null`) result as a failure (`!null === true`), while `hadPermanentFailures()` correctly checks `=== false`. Inconsistent; currently masked only by webhook's call ordering.
-- `src/lib/dynamodbRetry.js`: unused `params` argument (every call site passes `null`), an unreachable trailing "safety net" return, and a dead AWS-SDK-v2-style `error.code` fallback check (codebase is v3-only, uses `.name`).
-
-**Tier 3 — lower-priority correctness:**
-- `track/index.js` trusts `trackingData.events[0]` as "latest" without sorting first (unlike `isOutForDeliveryEvent`, which explicitly re-sorts since array order isn't guaranteed).
-- Same-timestamp distinct events can silently collapse in `track/index.js`'s `occurred_at`-keyed dedup Map, with no counter/log distinguishing this from a normal duplicate.
-- Frontend `sanitize.js` validation rules (length/charset for tracking number/carrier) don't match the backend's actual regexes in `track/index.js` — a value can pass client-side validation and still get a generic rejection from the API.
-- Two unreachable `.length > 100` validation branches in `App.jsx` (`sanitizeTextField` already truncates to `maxLength` before the check runs).
-- `getLabelGeneratedDate` (`shipmentHelpers.js`) still substring-matches event descriptions to find the label-creation event — the same fragile pattern replaced for OFD detection via `status_detail_code`. No equivalent structured field exists yet to swap in.
-
-**Tier 4 — infra/IAM/CI (higher blast radius, touches live IAM policies and the deploy pipeline):**
-- IAM over-permissioning: `Webhook`/`Track`/`MonitorStaleness` all hold `DynamoDBCrudPolicy` but only ever Get/Update/Query/Put a subset. `MonitorStalenessFunction` is worst — an unauthenticated cron job holding full delete rights over the whole Shipments table. `ListFunction`'s `DynamoDBReadPolicy` is the correct pattern to copy.
-- `deploy.yml`: `Lint Frontend` runs *after* `SAM Deploy` already went live — a lint failure leaves a new backend + stale frontend in production with no rollback.
-- No `AWS::SecretsManager::Secret` resource exists in `template.yaml` for `ParcelTracker/ShipStationApiKey` despite two IAM policies referencing its ARN — it's a manual, undocumented bootstrap step.
-- SAM build cache key (`hashFiles('template.yaml')`) never busts on `src/**` changes.
-- `.env.example` documents wrong table-name env vars and an inaccurate `AWS_REGION` explanation.
-- Deferred, not recommended yet: a GSI for `list`/`monitor-staleness`'s full-table Scans. Correct long-term fix if shipment volume grows, but cheap enough at current (~100 shipment) scale to leave as-is.
 
 ---
 
