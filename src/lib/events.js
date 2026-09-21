@@ -14,6 +14,7 @@ function mapTrackingEvent(trackingNumber, e) {
     signer: e.signer || null,
     eventCode: e.event_code || null,
     carrierDetailCode: e.carrier_detail_code || null,
+    statusDetailCode: e.status_detail_code || null,
     statusCode: e.status_code || null,
     statusDescription: e.status_description || null,
     carrierStatusCode: e.carrier_status_code || null,
@@ -22,6 +23,28 @@ function mapTrackingEvent(trackingNumber, e) {
     longitude: e.longitude || null,
     createdAt: new Date().toISOString(),
   };
+}
+
+// Whether a tracking payload represents an "out for delivery" scan.
+//
+// ShipStation normalizes status_detail_code across USPS, UPS, and FedEx, so a
+// structured code is now a reliable, carrier-agnostic signal — unlike the old
+// approach of substring-matching free-text carrier descriptions, which broke
+// whenever a carrier's wording didn't say "out for delivery" verbatim.
+// Checked at both the top level and the latest event: no confirmed sample
+// pins down which level ShipStation populates it on, and checking both is
+// correct either way.
+function isOutForDeliveryEvent(data) {
+  if (data.status_code !== "IT") return false;
+  if (data.status_detail_code === "OUT_FOR_DELIVERY") return true;
+
+  const latestEvent = data.events
+    ? [...data.events].sort(
+        (a, b) => new Date(b.occurred_at) - new Date(a.occurred_at),
+      )[0]
+    : undefined;
+
+  return latestEvent?.status_detail_code === "OUT_FOR_DELIVERY";
 }
 
 // Identity of a single physical carrier event within one shipment.
@@ -82,4 +105,5 @@ module.exports = {
   rawEventIdentity,
   storedEventIdentity,
   dedupeIncomingEvents,
+  isOutForDeliveryEvent,
 };

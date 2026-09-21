@@ -4,6 +4,7 @@ const {
   mapTrackingEvent,
   eventIdentity,
   dedupeIncomingEvents,
+  isOutForDeliveryEvent,
 } = require("../src/lib/events");
 
 test("mapTrackingEvent maps snake_case fields and sets keys", () => {
@@ -13,6 +14,7 @@ test("mapTrackingEvent maps snake_case fields and sets keys", () => {
     state_province: "NV",
     country_code: "US",
     description: "In transit",
+    status_detail_code: "OUT_FOR_DELIVERY",
   });
   assert.equal(item.trackingNumber, "1Z999");
   assert.equal(item.occurredAt, "2026-06-27T10:00:00Z");
@@ -21,6 +23,7 @@ test("mapTrackingEvent maps snake_case fields and sets keys", () => {
   assert.equal(item.countryCode, "US");
   assert.equal(item.description, "In transit");
   assert.equal(typeof item.createdAt, "string");
+  assert.equal(item.statusDetailCode, "OUT_FOR_DELIVERY");
 });
 
 test("mapTrackingEvent defaults missing fields to null", () => {
@@ -30,6 +33,48 @@ test("mapTrackingEvent defaults missing fields to null", () => {
   assert.equal(item.cityLocality, null);
   assert.equal(item.signer, null);
   assert.equal(item.latitude, null);
+  assert.equal(item.statusDetailCode, null);
+});
+
+test("isOutForDeliveryEvent matches on top-level status_detail_code", () => {
+  const result = isOutForDeliveryEvent({
+    status_code: "IT",
+    status_detail_code: "OUT_FOR_DELIVERY",
+  });
+  assert.equal(result, true);
+});
+
+test("isOutForDeliveryEvent matches when only the latest event carries the detail code", () => {
+  const result = isOutForDeliveryEvent({
+    status_code: "IT",
+    events: [
+      { occurred_at: "2026-06-27T08:00:00Z", status_detail_code: "ARRIVED_AT_FACILITY" },
+      { occurred_at: "2026-06-27T10:00:00Z", status_detail_code: "OUT_FOR_DELIVERY" },
+    ],
+  });
+  assert.equal(result, true);
+});
+
+test("isOutForDeliveryEvent requires status_code IT even with a matching detail code", () => {
+  const result = isOutForDeliveryEvent({
+    status_code: "DE",
+    status_detail_code: "OUT_FOR_DELIVERY",
+  });
+  assert.equal(result, false);
+});
+
+test("isOutForDeliveryEvent returns false when no detail code matches", () => {
+  const result = isOutForDeliveryEvent({
+    status_code: "IT",
+    status_detail_code: "ARRIVED_AT_FACILITY",
+    events: [{ occurred_at: "2026-06-27T10:00:00Z", status_detail_code: "ARRIVED_AT_FACILITY" }],
+  });
+  assert.equal(result, false);
+});
+
+test("isOutForDeliveryEvent handles a missing events array", () => {
+  const result = isOutForDeliveryEvent({ status_code: "IT" });
+  assert.equal(result, false);
 });
 
 test("eventIdentity ignores occurred_at, which differs between feeds", () => {

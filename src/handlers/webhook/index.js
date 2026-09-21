@@ -15,6 +15,7 @@ const {
 const {
   mapTrackingEvent,
   dedupeIncomingEvents,
+  isOutForDeliveryEvent,
 } = require("../../lib/events");
 const { getDateOnly, getLocalDateString } = require("../../lib/dates");
 const { withRetry } = require("../../lib/dynamodbRetry");
@@ -43,24 +44,10 @@ async function sendPushNotification(
   const trackingNumber = data.tracking_number;
   const statusCode = data.status_code;
 
-  // 1. Get descriptions safely and convert to lowercase for case-insensitive matching
-  const topLevelDesc = (data.carrier_status_description || "").toLowerCase();
-  let latestEventDesc = "";
-  if (data.events && data.events.length > 0) {
-    // Use spread syntax [...] to avoid mutating the original array
-    const sortedEvents = [...data.events].sort(
-      (a, b) => new Date(b.occurred_at) - new Date(a.occurred_at),
-    );
-    latestEventDesc = (sortedEvents[0].description || "").toLowerCase();
-  }
-
-  // 2. Evaluate notification rules
+  // 1. Evaluate notification rules
   const isDelivered = statusCode === "DE";
   const isException = statusCode === "EX";
-  const isOutForDelivery =
-    statusCode === "IT" &&
-    (topLevelDesc.includes("out for delivery") ||
-      latestEventDesc.includes("out for delivery"));
+  const isOutForDelivery = isOutForDeliveryEvent(data);
 
   // NEW: Exit early if we already sent an OFD today for this package
   if (isOutForDelivery && skipOfdNotification) {
@@ -241,30 +228,19 @@ exports.handler = async (event) => {
     const existingDateString = getDateOnly(existingEdd);
     const incomingDateString = getDateOnly(incomingEdd);
 
-    // ==============================================================
-    // NEW: Check if this payload represents an Out For Delivery event
-    // ==============================================================
-    const topLevelDesc = (data.carrier_status_description || "").toLowerCase();
-    let latestEventDesc = "";
-    if (latestEvent) {
-      latestEventDesc = (latestEvent.description || "").toLowerCase();
-    }
-
-    const isOutForDelivery =
-      data.status_code === "IT" &&
-      (topLevelDesc.includes("out for delivery") ||
-        latestEventDesc.includes("out for delivery"));
+    const isOutForDelivery = isOutForDeliveryEvent(data);
 
     const todayStr = getLocalDateString();
     let skipOfdNotification = false;
 
     // 2. Build the base Update parameters
     let updateExpression =
-      "SET statusCode = :sc, carrierDetailCode = :cdc, statusDescription = :sd, carrierStatusCode = :csc, carrierStatusDescription = :csd, shipDate = :sdDate, estimatedDeliveryDate = :edd, actualDeliveryDate = :ad, exceptionDescription = :ed, updatedAt = :u, lastEventTimestamp = :let, lastStaleNotificationAt = :null";
+      "SET statusCode = :sc, carrierDetailCode = :cdc, statusDetailCode = :sdc, statusDescription = :sd, carrierStatusCode = :csc, carrierStatusDescription = :csd, shipDate = :sdDate, estimatedDeliveryDate = :edd, actualDeliveryDate = :ad, exceptionDescription = :ed, updatedAt = :u, lastEventTimestamp = :let, lastStaleNotificationAt = :null";
 
     let expressionAttributeValues = {
       ":sc": data.status_code || "UNKNOWN",
       ":cdc": data.carrier_detail_code || null,
+      ":sdc": data.status_detail_code || null,
       ":sd": data.status_description || "No description",
       ":csc": data.carrier_status_code || null,
       ":csd": data.carrier_status_description || null,

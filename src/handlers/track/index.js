@@ -234,6 +234,7 @@ exports.handler = async (event) => {
       createdAt: new Date().toISOString(),
       statusCode: trackingData.status_code || "UNKNOWN",
       carrierDetailCode: trackingData.carrier_detail_code || null,
+      statusDetailCode: trackingData.status_detail_code || null,
       statusDescription:
         trackingData.status_description || "Awaiting tracking data",
       carrierStatusCode: trackingData.carrier_status_code || null,
