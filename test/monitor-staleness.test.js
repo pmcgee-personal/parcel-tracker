@@ -86,7 +86,7 @@ global.fetch = async (url, options) => {
   return { ok: true, status: 200 };
 };
 
-const { handler } = require("../src/handlers/monitor-staleness/index.js");
+const { handler, sendNtfyNotification } = require("../src/handlers/monitor-staleness/index.js");
 
 test("Monitor staleness - finds stale shipments and sends notification", async () => {
   const now = Date.now();
@@ -375,4 +375,91 @@ test("Monitor staleness - follows pagination across multiple scan pages", async 
     trackingNumbers.includes("PAGE2_STALE"),
     "Shipments on later scan pages must not be silently dropped",
   );
+});
+
+test("sendNtfyNotification only uses Latin-1-safe header values (regression: an emoji in a header crashes fetch)", async () => {
+  mockFetchCalls = [];
+
+  const result = await sendNtfyNotification("test message");
+
+  assert.equal(result, true);
+  assert.equal(mockFetchCalls.length, 1);
+
+  // HTTP headers must be Latin-1 (ByteString); undici's fetch throws
+  // synchronously on any character above code point 255, before the request
+  // is ever sent. This caught a real "No Events ⏳" Title header that silently
+  // broke every staleness notification for a week.
+  const { headers } = mockFetchCalls[0].options;
+  for (const [name, value] of Object.entries(headers)) {
+    for (const char of String(value)) {
+      assert.ok(
+        char.charCodeAt(0) <= 255,
+        `header ${name} contains non-Latin-1 character ${JSON.stringify(char)} (value: ${value})`,
+      );
+    }
+  }
+});
+
+test("sendNtfyNotification returns false when ntfy responds with a non-2xx status", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({ ok: false, status: 500 });
+
+  const result = await sendNtfyNotification("test message");
+
+  global.fetch = originalFetch;
+  assert.equal(result, false);
+});
+
+test("sendNtfyNotification returns false when fetch throws (e.g. the header-encoding TypeError)", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    throw new TypeError("Cannot convert argument to a ByteString");
+  };
+
+  const result = await sendNtfyNotification("test message");
+
+  global.fetch = originalFetch;
+  assert.equal(result, false);
+});
+
+test("Monitor staleness - does not stamp lastStaleNotificationAt when the ntfy send fails", async () => {
+  const now = Date.now();
+  const fortyEightHoursAgo = new Date(now - 48.5 * 60 * 60 * 1000).toISOString();
+
+  const shipments = [
+    {
+      trackingNumber: "STALE001",
+      carrier: "ups",
+      statusDescription: "In Transit",
+      lastEventTimestamp: fortyEightHoursAgo,
+    },
+  ];
+
+  let updateCount = 0;
+  mockDocClientSend = async (command) => {
+    if (command.constructor.name === "ScanCommand") {
+      return { Items: shipments };
+    }
+    if (command.constructor.name === "UpdateCommand") {
+      updateCount++;
+      return {};
+    }
+    return {};
+  };
+
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({ ok: false, status: 500 });
+
+  const response = await handler({});
+
+  global.fetch = originalFetch;
+
+  assert.equal(response.statusCode, 502);
+  const body = JSON.parse(response.body);
+  assert.equal(body.notified, false);
+  assert.equal(body.staleShipments.length, 1);
+
+  // The whole point: a failed send must not silently mark the shipment as
+  // handled, or it would never be retried and the failure would stay hidden.
+  assert.equal(updateCount, 0);
 });

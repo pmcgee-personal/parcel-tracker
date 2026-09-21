@@ -83,32 +83,46 @@ async function monitorStaleness() {
     console.log(`Found ${staleShipments.length} stale shipments to notify`);
 
     const trackingNumbers = staleShipments.map((s) => s.trackingNumber);
-    const message = `No events for ${staleShipments.length} shipment(s): ${trackingNumbers.join(", ")}`;
+    // Emoji lives in the body (UTF-8 safe), never in a header (Latin-1/ByteString only).
+    const message = `⏳ No events for ${staleShipments.length} shipment(s): ${trackingNumbers.join(", ")}`;
 
-    await sendNtfyNotification(message);
+    const notified = await sendNtfyNotification(message);
 
-    // Update lastStaleNotificationAt for each stale shipment
-    for (const shipment of staleShipments) {
-      const updateCommand = new UpdateCommand({
-        TableName: SHIPMENTS_TABLE,
-        Key: { trackingNumber: shipment.trackingNumber },
-        UpdateExpression: "SET lastStaleNotificationAt = :now",
-        ExpressionAttributeValues: {
-          ":now": new Date().toISOString(),
-        },
-      });
-      await docClient.send(updateCommand);
+    if (notified) {
+      // Update lastStaleNotificationAt for each stale shipment
+      for (const shipment of staleShipments) {
+        const updateCommand = new UpdateCommand({
+          TableName: SHIPMENTS_TABLE,
+          Key: { trackingNumber: shipment.trackingNumber },
+          UpdateExpression: "SET lastStaleNotificationAt = :now",
+          ExpressionAttributeValues: {
+            ":now": new Date().toISOString(),
+          },
+        });
+        await docClient.send(updateCommand);
+      }
+
+      console.log(
+        `Updated lastStaleNotificationAt for ${staleShipments.length} shipments`,
+      );
+    } else {
+      // Don't stamp lastStaleNotificationAt on a failed send — that would silently
+      // suppress retries for the full cooldown window even though nothing was
+      // ever delivered. Leaving it untouched means these shipments are
+      // re-evaluated (and re-notified) on the next scheduled run.
+      console.warn(
+        `ntfy notification failed; leaving lastStaleNotificationAt untouched so ${staleShipments.length} shipment(s) are retried next cycle`,
+      );
     }
 
-    console.log(
-      `Updated lastStaleNotificationAt for ${staleShipments.length} shipments`,
-    );
-
     return {
-      statusCode: 200,
+      statusCode: notified ? 200 : 502,
       body: JSON.stringify({
-        message: `Sent notification for ${staleShipments.length} stale shipment(s)`,
+        message: notified
+          ? `Sent notification for ${staleShipments.length} stale shipment(s)`
+          : `Found ${staleShipments.length} stale shipment(s) but ntfy notification failed`,
         staleShipments: staleShipments,
+        notified,
       }),
     };
   } catch (error) {
@@ -123,11 +137,12 @@ async function monitorStaleness() {
   }
 }
 
-// Send ntfy notification
+// Send ntfy notification. Returns true only when the push was actually
+// delivered — callers must not treat a falsy return as "handled".
 async function sendNtfyNotification(message) {
   if (!NTFY_URL) {
     console.warn("NTFY_URL not configured, skipping notification");
-    return;
+    return false;
   }
 
   try {
@@ -135,7 +150,12 @@ async function sendNtfyNotification(message) {
       method: "POST",
       body: message,
       headers: {
-        Title: "No Events ⏳",
+        // HTTP header values must be Latin-1 (ByteString) — undici's fetch
+        // throws synchronously on a non-Latin-1 character (e.g. an emoji)
+        // here, before the request is ever sent. Keep these ASCII-only;
+        // any visual flair belongs in the body above, which has no such
+        // restriction.
+        Title: "No Events",
         Priority: "default",
         Tags: "hourglass",
       },
@@ -145,11 +165,14 @@ async function sendNtfyNotification(message) {
       console.warn(
         `Failed to send ntfy notification: HTTP ${response.status}`,
       );
-    } else {
-      console.log("ntfy notification sent successfully");
+      return false;
     }
+
+    console.log("ntfy notification sent successfully");
+    return true;
   } catch (error) {
     console.error("Error sending ntfy notification:", error);
+    return false;
   }
 }
 
@@ -158,3 +181,7 @@ exports.handler = async (event) => {
   console.log("Staleness monitor triggered");
   return await monitorStaleness();
 };
+
+// Exported for unit testing the header-safety/success-signaling contract in
+// isolation, without going through the full scan-and-notify flow.
+exports.sendNtfyNotification = sendNtfyNotification;
