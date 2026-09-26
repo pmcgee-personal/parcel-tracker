@@ -32,7 +32,7 @@ const DriftBadge = ({
         {IconSVG}
       </button>
       {showTooltip && (
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col w-56 p-3 bg-slate-950 text-xs text-slate-200 rounded-lg shadow-xl border border-slate-700/80 z-50">
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col w-56 p-3 bg-slate-950 text-xs text-slate-200 rounded-lg shadow-xl border border-slate-700/80 z-50 whitespace-normal break-words">
           <button
             onClick={() => setShowTooltip(false)}
             className="absolute top-1 right-1 text-slate-500 hover:text-slate-300 text-lg leading-none"
@@ -118,13 +118,7 @@ export const EstimatedDeliveryWithHistory = ({ shipment }) => {
         driftText="Delivery Delayed"
         IconSVG={<ArrowDownIcon />}
         ariaLabel={`Delivery Delayed: estimate of ${formattedCurrentDate} has passed`}
-        body={
-          <>
-            Estimated delivery of{" "}
-            <strong className="text-white">{formattedCurrentDate}</strong>{" "}
-            has passed with no carrier update since.
-          </>
-        }
+        body="Estimated delivery date has passed with no new update."
         pulse
       />
     );
