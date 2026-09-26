@@ -10,7 +10,7 @@ const {
   mapTrackingEvent,
   dedupeIncomingEvents,
 } = require("../../lib/events");
-const { getDateOnly } = require("../../lib/dates");
+const { getCarrierCalendarDate, parseCarrierTimestamp } = require("../../lib/dates");
 const { generateRequestId, makeJsonResponse } = require("../../lib/http");
 const { fetchWithRetry } = require("../../lib/fetchWithRetry");
 const { getShipStationApiKey } = require("../../lib/secrets");
@@ -135,10 +135,13 @@ exports.handler = async (event) => {
       console.warn("Could not retrieve existing shipment:", dbErr.message);
     }
 
-    const newEstimatedDeliveryDate =
+    const newEstimatedDeliveryDateRaw =
       trackingData.estimated_delivery_date || null;
-    const oldDateString = getDateOnly(oldEstimatedDeliveryDate);
-    const newDateString = getDateOnly(newEstimatedDeliveryDate);
+    const newEstimatedDeliveryDate = newEstimatedDeliveryDateRaw
+      ? parseCarrierTimestamp(newEstimatedDeliveryDateRaw).toISOString()
+      : null;
+    const oldDateString = getCarrierCalendarDate(oldEstimatedDeliveryDate);
+    const newDateString = getCarrierCalendarDate(newEstimatedDeliveryDate);
 
     // 2. Track change if old date exists, new date exists, and CALENDAR dates are different
     if (oldDateString && newDateString && oldDateString !== newDateString) {

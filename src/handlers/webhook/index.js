@@ -17,7 +17,11 @@ const {
   dedupeIncomingEvents,
   isOutForDeliveryEvent,
 } = require("../../lib/events");
-const { getDateOnly, getLocalDateString } = require("../../lib/dates");
+const {
+  getCarrierCalendarDate,
+  getLocalDateString,
+  parseCarrierTimestamp,
+} = require("../../lib/dates");
 const { withRetry } = require("../../lib/dynamodbRetry");
 const { OperationTracker } = require("../../lib/operationTracker");
 const { generateRequestId } = require("../../lib/http");
@@ -201,10 +205,13 @@ exports.handler = async (event) => {
         )[0]
       : undefined;
 
-    const incomingEdd = data.estimated_delivery_date || null;
+    const incomingEddRaw = data.estimated_delivery_date || null;
+    const incomingEdd = incomingEddRaw
+      ? parseCarrierTimestamp(incomingEddRaw).toISOString()
+      : null;
 
-    const existingDateString = getDateOnly(existingEdd);
-    const incomingDateString = getDateOnly(incomingEdd);
+    const existingDateString = getCarrierCalendarDate(existingEdd);
+    const incomingDateString = getCarrierCalendarDate(incomingEdd);
 
     const isOutForDelivery = isOutForDeliveryEvent(data);
 

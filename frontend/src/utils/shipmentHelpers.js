@@ -15,14 +15,22 @@ export const getStatusStyle = (code) => {
 };
 
 // Filter delivery-date history entries down to those whose calendar day
-// differs from `currentDate` (both ISO strings). Used to find the
-// "original" estimated delivery date before any subsequent carrier
+// (in the viewer's local timezone) differs from `currentDate`. Used to find
+// the "original" estimated delivery date before any subsequent carrier
 // reschedule, ignoring history entries that just repeat the current date.
+//
+// Buckets by local day (not a raw ISO-string slice) so that two carrier
+// timestamps representing the same instant in different formats (e.g. a
+// bare "...T17:00:00" and its UTC equivalent "...T00:00:00Z") are never
+// mistaken for a real date change, and so this always agrees with the
+// local-day comparison DriftIndicator uses to pick the drift direction.
 export const filterHistoryExcludingDate = (history, currentDate) => {
-  const currentDay = currentDate ? currentDate.split("T")[0] : null;
+  if (!currentDate) return [];
+  const currentDay = new Date(currentDate).setHours(0, 0, 0, 0);
   return (history || []).filter((historyItem) => {
-    const historyDay = historyItem.date ? historyItem.date.split("T")[0] : null;
-    return historyDay && historyDay !== currentDay;
+    if (!historyItem.date) return false;
+    const historyDay = new Date(historyItem.date).setHours(0, 0, 0, 0);
+    return historyDay !== currentDay;
   });
 };
 
