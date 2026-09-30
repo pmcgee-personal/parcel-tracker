@@ -12,6 +12,9 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout code
@@ -21,7 +24,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "22" # Match the Lambda runtime (nodejs22.x)
-          cache: 'npm'
+          cache: "npm"
           cache-dependency-path: |
             package-lock.json
             frontend/package-lock.json
@@ -40,8 +43,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v5
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::043105573385:role/parcel-tracker-github-actions
           aws-region: us-west-2 # Make sure this is your correct AWS region
 
       - name: Setup SAM
