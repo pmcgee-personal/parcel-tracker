@@ -12,6 +12,10 @@ Parameters:
     Type: String
     Description: "The unique ntfy.sh channel URL used for sending push notifications"
     NoEcho: true # Hides the value in CloudFormation logs and the AWS Console
+  AlertEmail:
+    Type: String
+    Description: "Email address that receives CloudWatch alarm notifications"
+    NoEcho: true
 
 Globals:
   Function:
@@ -210,6 +214,291 @@ Resources:
             Schedule: "cron(0 */6 * * ? *)" # Every 6 hours
             Name: ParcelTrackerStalenessMonitor
             Description: Monitor for shipments with no updates in 48+ hours
+
+  # --- MONITORING: ALERTS + ALARMS ---
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: parcel-tracker-alerts
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+
+  WebhookLoggedErrorsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${WebhookFunction}"
+      FilterPattern: '"ERROR"' # console.error lines (caught failures that never raise a Lambda Error)
+      MetricTransformations:
+        - MetricNamespace: ParcelTracker
+          MetricName: WebhookLoggedErrors
+          MetricValue: "1"
+          DefaultValue: 0
+
+  TrackLoggedErrorsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${TrackFunction}"
+      FilterPattern: '"ERROR"' # console.error lines (caught failures that never raise a Lambda Error)
+      MetricTransformations:
+        - MetricNamespace: ParcelTracker
+          MetricName: TrackLoggedErrors
+          MetricValue: "1"
+          DefaultValue: 0
+
+  ListLoggedErrorsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ListFunction}"
+      FilterPattern: '"ERROR"' # console.error lines (caught failures that never raise a Lambda Error)
+      MetricTransformations:
+        - MetricNamespace: ParcelTracker
+          MetricName: ListLoggedErrors
+          MetricValue: "1"
+          DefaultValue: 0
+
+  DeleteLoggedErrorsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${DeleteFunction}"
+      FilterPattern: '"ERROR"' # console.error lines (caught failures that never raise a Lambda Error)
+      MetricTransformations:
+        - MetricNamespace: ParcelTracker
+          MetricName: DeleteLoggedErrors
+          MetricValue: "1"
+          DefaultValue: 0
+
+  MonitorStalenessLoggedErrorsFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${MonitorStalenessFunction}"
+      FilterPattern: '"ERROR"' # console.error lines (caught failures that never raise a Lambda Error)
+      MetricTransformations:
+        - MetricNamespace: ParcelTracker
+          MetricName: MonitorStalenessLoggedErrors
+          MetricValue: "1"
+          DefaultValue: 0
+
+  WebhookFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ParcelTracker-Webhook-Failures
+      AlarmDescription: "WebhookFunction raised a Lambda error or logged an ERROR"
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      EvaluationPeriods: 1
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: total
+          Expression: "errs + logged"
+          Label: Failures
+          ReturnData: true
+        - Id: errs
+          ReturnData: false
+          MetricStat:
+            Stat: Sum
+            Period: 300
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Errors
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref WebhookFunction
+        - Id: logged
+          ReturnData: false
+          MetricStat:
+            Stat: Sum
+            Period: 300
+            Metric:
+              Namespace: ParcelTracker
+              MetricName: WebhookLoggedErrors
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  TrackFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ParcelTracker-Track-Failures
+      AlarmDescription: "TrackFunction raised a Lambda error or logged an ERROR"
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      EvaluationPeriods: 1
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: total
+          Expression: "errs + logged"
+          Label: Failures
+          ReturnData: true
+        - Id: errs
+          ReturnData: false
+          MetricStat:
+            Stat: Sum
+            Period: 300
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Errors
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref TrackFunction
+        - Id: logged
+          ReturnData: false
+          MetricStat:
+            Stat: Sum
+            Period: 300
+            Metric:
+              Namespace: ParcelTracker
+              MetricName: TrackLoggedErrors
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  ListFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ParcelTracker-List-Failures
+      AlarmDescription: "ListFunction raised a Lambda error or logged an ERROR"
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      EvaluationPeriods: 1
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: total
+          Expression: "errs + logged"
+          Label: Failures
+          ReturnData: true
+        - Id: errs
+          ReturnData: false
+          MetricStat:
+            Stat: Sum
+            Period: 300
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Errors
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref ListFunction
+        - Id: logged
+          ReturnData: false
+          MetricStat:
+            Stat: Sum
+            Period: 300
+            Metric:
+              Namespace: ParcelTracker
+              MetricName: ListLoggedErrors
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  DeleteFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ParcelTracker-Delete-Failures
+      AlarmDescription: "DeleteFunction raised a Lambda error or logged an ERROR"
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      EvaluationPeriods: 1
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: total
+          Expression: "errs + logged"
+          Label: Failures
+          ReturnData: true
+        - Id: errs
+          ReturnData: false
+          MetricStat:
+            Stat: Sum
+            Period: 300
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Errors
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref DeleteFunction
+        - Id: logged
+          ReturnData: false
+          MetricStat:
+            Stat: Sum
+            Period: 300
+            Metric:
+              Namespace: ParcelTracker
+              MetricName: DeleteLoggedErrors
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  MonitorStalenessFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ParcelTracker-MonitorStaleness-Failures
+      AlarmDescription: "MonitorStalenessFunction raised a Lambda error or logged an ERROR"
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      EvaluationPeriods: 1
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: total
+          Expression: "errs + logged"
+          Label: Failures
+          ReturnData: true
+        - Id: errs
+          ReturnData: false
+          MetricStat:
+            Stat: Sum
+            Period: 300
+            Metric:
+              Namespace: AWS/Lambda
+              MetricName: Errors
+              Dimensions:
+                - Name: FunctionName
+                  Value: !Ref MonitorStalenessFunction
+        - Id: logged
+          ReturnData: false
+          MetricStat:
+            Stat: Sum
+            Period: 300
+            Metric:
+              Namespace: ParcelTracker
+              MetricName: MonitorStalenessLoggedErrors
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  Api5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ParcelTracker-Api-5XX
+      AlarmDescription: "API Gateway returned a 5XX response"
+      Namespace: AWS/ApiGateway
+      MetricName: 5XXError
+      Dimensions:
+        - Name: ApiName
+          Value: !Ref AWS::StackName # SAM implicit API is named after the stack
+        - Name: Stage
+          Value: Prod
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  # The staleness monitor is scheduled every 6h; no invocation in 12h means the schedule is broken.
+  StalenessNotRunningAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ParcelTracker-Staleness-NotRunning
+      AlarmDescription: "MonitorStalenessFunction has not been invoked in 12 hours"
+      Namespace: AWS/Lambda
+      MetricName: Invocations
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref MonitorStalenessFunction
+      Statistic: Sum
+      Period: 43200
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
 
   # --- FRONTEND HOSTING RESOURCES ---
   FrontendBucket:
